@@ -421,6 +421,23 @@ function checkServerStatus() {
 
             // 加载历史记录
             loadHistory();
+
+            // 如果有节点，显示订阅链接列表
+            if (info.nodeCount > 0) {
+                const host = window.location.host;
+                const proto = window.location.protocol;
+                const baseUrl = `${proto}//${host}/sub`;
+                const subUrls = {
+                    universal: baseUrl,
+                    base64: `${baseUrl}?format=base64`,
+                    'clash-yaml': `${baseUrl}?format=clash-yaml`,
+                    'clash-meta': `${baseUrl}?format=clash-meta`,
+                    surge: `${baseUrl}?format=surge`,
+                    'sing-box': `${baseUrl}?format=sing-box`,
+                    raw: `${baseUrl}?format=raw`
+                };
+                renderSubUrls(subUrls, info.nodeCount, 0);
+            }
         })
         .catch(() => {
             el.textContent = '● 未启动';
@@ -509,33 +526,7 @@ function saveToSubService() {
 
             // 显示订阅 URL 列表
             const grid = document.getElementById('subUrlGrid');
-            const formatLabels = {
-                'universal': { name: '通用订阅', icon: '🌐', desc: '自动识别客户端（推荐）' },
-                'base64': { name: 'Base64 订阅', icon: '⚔️', desc: 'Base64 编码' },
-                'clash-yaml': { name: 'Clash YAML', icon: '📄', desc: 'Clash 完整配置' },
-                'clash-meta': { name: 'Clash Meta', icon: '🌀', desc: 'Mihomo / Verge Rev' },
-                'surge': { name: 'Surge', icon: '🌊', desc: 'Surge iOS/macOS' },
-                'sing-box': { name: 'Sing-Box', icon: '📦', desc: 'Sing-Box / NekoBox' },
-                'raw': { name: '原始链接', icon: '📋', desc: '通用' }
-            };
-
-            grid.innerHTML = Object.entries(data.subUrls).map(([fmt, url]) => {
-                const label = formatLabels[fmt] || { name: fmt, icon: '🔗', desc: '' };
-                return `<div class="sub-url-item" onclick="copyUrl('${url}')" title="点击复制">
-        <span class="sub-url-icon">${label.icon}</span>
-        <div class="sub-url-info">
-          <span class="sub-url-name">${label.name}</span>
-          <span class="sub-url-desc">${label.desc}</span>
-        </div>
-        <code class="sub-url-link">${url}</code>
-        <span class="sub-url-copy">📋</span>
-      </div>`;
-            }).join('');
-
-            document.getElementById('subUrlList').style.display = 'block';
-            const newInfo = data.newCount ? `（本次新增 ${data.newCount}，` : '（';
-            status.textContent = `✅ 订阅共 ${data.count} 个节点 ${newInfo}已去重合并）`;
-            status.style.color = 'var(--success)';
+            renderSubUrls(data.subUrls, data.count, data.newCount);
             showToast(`✅ ${data.count} 个节点已保存到订阅服务`, 'success');
             checkServerStatus();
         })
@@ -1154,4 +1145,46 @@ function addSingleNode() {
             checkServerStatus();
         })
         .catch(e => showToast('❌ 添加失败: ' + e.message, 'error'));
+}
+
+function renderSubUrls(subUrls, totalCount, newCount) {
+    const grid = document.getElementById('subUrlGrid');
+    if (!grid) return;
+
+    const formatLabels = {
+        'universal': { name: '通用订阅', icon: '🌐', desc: '自动识别客户端（推荐）' },
+        'base64': { name: 'Base64 订阅', icon: '⚔️', desc: 'Base64 编码' },
+        'clash-yaml': { name: 'Clash YAML', icon: '📄', desc: 'Clash 完整配置' },
+        'clash-meta': { name: 'Clash Meta', icon: '🌀', desc: 'Mihomo / Verge Rev' },
+        'surge': { name: 'Surge', icon: '🌊', desc: 'Surge iOS/macOS' },
+        'sing-box': { name: 'Sing-Box', icon: '📦', desc: 'Sing-Box / NekoBox' },
+        'raw': { name: '原始链接', icon: '📋', desc: '通用' }
+    };
+
+    grid.innerHTML = Object.entries(subUrls).map(([fmt, url]) => {
+        const label = formatLabels[fmt] || { name: fmt, icon: '🔗', desc: '' };
+        return `<div class="sub-url-item" onclick="copyUrl('${url}')" title="点击复制">
+        <span class="sub-url-icon">${label.icon}</span>
+        <div class="sub-url-info">
+          <span class="sub-url-name">${label.name}</span>
+          <span class="sub-url-desc">${label.desc}</span>
+        </div>
+        <code class="sub-url-link">${url}</code>
+        <span class="sub-url-copy">📋</span>
+      </div>`;
+    }).join('');
+
+    const status = document.getElementById('saveStatus');
+    const listSection = document.getElementById('subUrlList');
+
+    if (listSection) listSection.style.display = 'block';
+
+    if (status) {
+        if (newCount !== undefined && newCount > 0) {
+            status.textContent = `✅ 订阅共 ${totalCount} 个节点 （本次新增 ${newCount}，已去重合并）`;
+        } else {
+            status.textContent = `✅ 订阅共 ${totalCount} 个节点`;
+        }
+        status.style.color = 'var(--success)';
+    }
 }
