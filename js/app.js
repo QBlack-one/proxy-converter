@@ -490,9 +490,10 @@ function saveToSubService() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ links: rawLinks })
     }))
-        .then(r => {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
+        .then(async r => {
+            const data = await r.json();
+            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
+            return data;
         })
         .then(data => {
             if (data.error) throw new Error(data.error);
@@ -903,16 +904,34 @@ function clearHistory() {
     fetch(SUB_SERVER + '/api/history', getFetchOptions({
         method: 'DELETE'
     }))
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                showToast('✅ 历史记录已清空', 'success');
-                loadHistory();
-            } else {
-                throw new Error(data.error || '清空失败');
-            }
+        .then(async r => {
+            const data = await r.json();
+            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
+            return data;
         })
-        .catch(e => {
-            showToast('❌ 清空失败: ' + e.message, 'error');
-        });
+        .then(data => {
+            showToast('✅ 历史记录已清空', 'success');
+            loadHistory();
+        })
+        .catch(e => showToast('❌ 清空失败: ' + e.message, 'error'));
+}
+
+// ==================== 清空所有节点 ====================
+
+function clearAllNodes() {
+    if (!confirm('⚠️ 确定要清空订阅中的所有节点吗？此操作不可恢复！')) return;
+
+    fetch(SUB_SERVER + '/api/links', getFetchOptions({
+        method: 'DELETE'
+    }))
+        .then(async r => {
+            const data = await r.json();
+            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
+            return data;
+        })
+        .then(data => {
+            showToast('✅ 所有节点已清空', 'success');
+            checkServerStatus();
+        })
+        .catch(e => showToast('❌ 清空失败: ' + e.message, 'error'));
 }

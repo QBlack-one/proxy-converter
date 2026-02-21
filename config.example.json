@@ -38,6 +38,7 @@
   "autoUpdate": {
     "enabled": false,
     "interval": 3600,
+    "replaceMode": false,
     "sources": [
       "https://example.com/subscription1",
       "https://example.com/subscription2"

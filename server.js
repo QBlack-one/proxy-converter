@@ -230,8 +230,9 @@ async function updateFromSources() {
     if (allLinks.length > 0) {
         const combined = allLinks.join('\n');
         try {
+            const replaceMode = config.autoUpdate.replaceMode || false;
             const result = convertLinks(combined, 'raw');
-            await saveLinks(combined, result.count);
+            await saveLinks(combined, result.count, null, replaceMode);
             console.log(`[${time()}] 自动更新完成: ${result.count} 个节点 (成功 ${successCount}/${config.autoUpdate.sources.length})`);
         } catch (e) {
             console.error(`[${time()}] 保存失败: ${e.message}`);
@@ -398,48 +399,47 @@ function requireAuth(req, res) {
 
 // ==================== 数据读写（异步版本） ====================
 
-async function saveLinks(rawText, nodeCount, nodeNames) {
-    // 读取已有的旧链接
-    let existingLinks = '';
-    try {
-        existingLinks = await fsPromises.readFile(LINKS_FILE, 'utf-8');
-    } catch (e) {
-        // 文件不存在，忽略
-    }
+async function saveLinks(rawText, nodeCount, nodeNames, replace = false) {
+    let merged;
 
-    // 合并旧链接和新链接，然后去重
-    const oldLines = existingLinks.split('\n').filter(l => l.trim());
-    const newLines = rawText.split('\n').filter(l => l.trim());
-    const seen = new Set();
-    const merged = [];
+    if (replace) {
+        // 替换模式：直接覆盖
+        merged = rawText.split('\n').filter(l => l.trim());
+    } else {
+        // 合并模式：读取已有链接并合并去重
+        let existingLinks = '';
+        try {
+            existingLinks = await fsPromises.readFile(LINKS_FILE, 'utf-8');
+        } catch (e) { /* 文件不存在 */ }
 
-    // 新链接优先（放在前面），再追加旧链接中未重复的
-    for (const line of [...newLines, ...oldLines]) {
-        const trimmed = line.trim();
-        if (trimmed && !seen.has(trimmed)) {
-            seen.add(trimmed);
-            merged.push(trimmed);
+        const oldLines = existingLinks.split('\n').filter(l => l.trim());
+        const newLines = rawText.split('\n').filter(l => l.trim());
+        const seen = new Set();
+        merged = [];
+
+        for (const line of [...newLines, ...oldLines]) {
+            const trimmed = line.trim();
+            if (trimmed && !seen.has(trimmed)) {
+                seen.add(trimmed);
+                merged.push(trimmed);
+            }
         }
     }
 
     const mergedText = merged.join('\n');
     await fsPromises.writeFile(LINKS_FILE, mergedText, 'utf-8');
 
-    // 重新统计合并后的节点数
-    const mergedResult = convertLinks(mergedText, 'raw');
-    const totalCount = mergedResult.count;
-
     const meta = {
         updatedAt: new Date().toISOString(),
         lineCount: merged.length,
-        nodeCount: totalCount
+        nodeCount: merged.length
     };
     await fsPromises.writeFile(META_FILE, JSON.stringify(meta, null, 2), 'utf-8');
 
-    // 追加历史记录（记录本次新上传的节点数）
-    await appendHistory(nodeCount, nodeNames);
+    // 追加历史记录
+    if (nodeNames) await appendHistory(nodeCount, nodeNames);
 
-    return { ...meta, newCount: nodeCount, totalCount };
+    return { ...meta, newCount: nodeCount || 0, totalCount: merged.length };
 }
 
 async function loadHistory() {
@@ -485,10 +485,10 @@ async function loadMeta() {
 
 // ==================== 转换（优化：预编译脚本） ====================
 
-// 预编译转换脚本模板
-const conversionScriptTemplate = `
+// 预编译脚本（只编译一次，通过沙箱变量传参）
+const conversionScript = new vm.Script(`
 (function() {
-  const links = extractLinks(RAW_CONTENT_PLACEHOLDER);
+  const links = extractLinks(__rawContent__);
   const proxies = [];
   for (const link of links) {
     const node = parseLink(link);
@@ -501,31 +501,26 @@ const conversionScriptTemplate = `
     seen.add(key);
     return true;
   });
-  const opts = OPTIONS_PLACEHOLDER;
-  const fmt = FORMAT_PLACEHOLDER;
   let output;
-  switch (fmt) {
-    case 'clash-yaml': output = generateClashConfig(unique, opts); break;
-    case 'clash-meta': output = generateClashMetaConfig(unique, opts); break;
-    case 'surge': output = generateSurgeConfig(unique, opts); break;
-    case 'sing-box': output = generateSingBoxConfig(unique, opts); break;
+  switch (__format__) {
+    case 'clash-yaml': output = generateClashConfig(unique, __options__); break;
+    case 'clash-meta': output = generateClashMetaConfig(unique, __options__); break;
+    case 'surge': output = generateSurgeConfig(unique, __options__); break;
+    case 'sing-box': output = generateSingBoxConfig(unique, __options__); break;
     case 'base64': output = generateBase64Sub(unique); break;
     case 'raw': output = generateRawLinks(unique); break;
     default: output = generateBase64Sub(unique);
   }
   return { count: unique.length, output, nodeNames: unique.map(p => p.name || (p.server + ':' + p.port)) };
 })()
-`;
+`);
 
 function convertLinks(rawContent, format, options = {}) {
-    // 替换占位符生成实际代码
-    const code = conversionScriptTemplate
-        .replace('RAW_CONTENT_PLACEHOLDER', JSON.stringify(rawContent))
-        .replace('OPTIONS_PLACEHOLDER', JSON.stringify(options))
-        .replace('FORMAT_PLACEHOLDER', JSON.stringify(format));
-
-    const script = new vm.Script(code);
-    return script.runInContext(engine);
+    // 通过沙箱变量传参，无需每次编译脚本
+    engine.__rawContent__ = rawContent;
+    engine.__format__ = format;
+    engine.__options__ = options;
+    return conversionScript.runInContext(engine);
 }
 
 // ==================== MIME & 文件名 ====================
@@ -560,8 +555,17 @@ const STATIC_MIME = {
 // ==================== HTTP 服务 ====================
 
 const server = http.createServer(async (req, res) => {
+    const startTime = Date.now();
     const parsedUrl = url.parse(req.url, true);
     const pathname = parsedUrl.pathname;
+
+    // 统一请求日志
+    res.on('finish', () => {
+        // 静态资源不记录日志
+        if (!pathname.startsWith('/api') && pathname !== '/sub') return;
+        const ms = Date.now() - startTime;
+        console.log(`[${time()}] ${req.method} ${pathname} → ${res.statusCode} (${ms}ms)`);
+    });
 
     // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -951,21 +955,38 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // ===== 静态文件服务 =====
+    // ===== DELETE /api/links - 清空所有节点 =====
+    if (pathname === '/api/links' && req.method === 'DELETE') {
+        if (!requireAuth(req, res)) return;
+        try {
+            await fsPromises.writeFile(LINKS_FILE, '', 'utf-8');
+            await fsPromises.writeFile(META_FILE, JSON.stringify({ updatedAt: new Date().toISOString(), lineCount: 0, nodeCount: 0 }, null, 2), 'utf-8');
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, message: '所有节点已清空' }));
+            console.log(`[${time()}] 所有节点已清空`);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // ===== 静态文件服务（异步） =====
     let filePath = pathname === '/' ? '/index.html' : pathname;
     filePath = path.join(__dirname, filePath);
     if (!filePath.startsWith(__dirname)) { res.writeHead(403); res.end('Forbidden'); return; }
 
     try {
-        const stat = fs.statSync(filePath);
+        const stat = await fsPromises.stat(filePath);
         if (stat.isDirectory()) filePath = path.join(filePath, 'index.html');
         const ext = path.extname(filePath);
         const contentType = STATIC_MIME[ext] || 'application/octet-stream';
+        const data = await fsPromises.readFile(filePath);
         res.writeHead(200, {
             'Content-Type': contentType,
             'Cache-Control': 'public, max-age=3600'
         });
-        res.end(fs.readFileSync(filePath));
+        res.end(data);
     } catch (e) {
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('404 Not Found');
@@ -973,6 +994,37 @@ const server = http.createServer(async (req, res) => {
 });
 
 function time() { return new Date().toLocaleTimeString(); }
+
+// ==================== 配置热重载 ====================
+
+let configWatchDebounce = null;
+const configFilePath = path.join(__dirname, 'config.json');
+try {
+    fs.watch(configFilePath, () => {
+        if (configWatchDebounce) clearTimeout(configWatchDebounce);
+        configWatchDebounce = setTimeout(() => {
+            try {
+                const newConfig = JSON.parse(fs.readFileSync(configFilePath, 'utf-8'));
+                // 热更新可安全重载的字段
+                if (newConfig.subscription) config.subscription = newConfig.subscription;
+                if (newConfig.security) config.security = newConfig.security;
+                if (newConfig.defaults) config.defaults = newConfig.defaults;
+                if (newConfig.autoUpdate) {
+                    const wasEnabled = config.autoUpdate.enabled;
+                    config.autoUpdate = newConfig.autoUpdate;
+                    // 自动更新状态变化时重启定时器
+                    if (!wasEnabled && config.autoUpdate.enabled) startAutoUpdate();
+                    if (wasEnabled && !config.autoUpdate.enabled) stopAutoUpdate();
+                }
+                console.log(`[${time()}] ♻️ 配置已热重载`);
+            } catch (e) {
+                console.error(`[${time()}] 配置重载失败: ${e.message}`);
+            }
+        }, 500); // 500ms 防抖
+    });
+} catch (e) {
+    // watch 不可用时静默忽略
+}
 
 server.listen(PORT, '0.0.0.0', async () => {
     console.log('');
