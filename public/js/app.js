@@ -229,7 +229,7 @@ function renderSubscription(proxies) {
 
 function getConfigOptions() {
     return {
-        title: document.getElementById('subTitle') ? document.getElementById('subTitle').value : '',
+        title: 'xinghe',
         httpPort: parseInt(document.getElementById('cfgHttpPort').value) || 7890,
         socksPort: parseInt(document.getElementById('cfgSocksPort').value) || 7891,
         allowLan: document.getElementById('cfgAllowLan').value === 'true',
@@ -250,11 +250,11 @@ function downloadConfig() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
 
-    // 如果设置了标题，则使用标题作为文件名，否则使用默认 ext 的名称
-    const title = document.getElementById('subTitle') ? document.getElementById('subTitle').value.trim() : '';
+    // 强制硬编码 title 为 xinghe
+    const title = 'xinghe';
     const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
-    const defaultName = `config_${dateStr}${fmt.ext}`;
-    a.download = title ? `${title}${fmt.ext}` : defaultName;
+    const defaultName = `${title}_${dateStr}${fmt.ext}`;
+    a.download = defaultName;
 
     a.href = url;
     document.body.appendChild(a);

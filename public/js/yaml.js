@@ -186,11 +186,9 @@ function generateClashConfig(proxies, options) {
     var lines = [];
 
     // ===== 基础配置 =====
-    var title = options.title || '代理订阅';
-    if (title) {
-        lines.push('name: ' + '"' + title + '"');
-        lines.push('profile-name: ' + '"' + title + '"');
-    }
+    var title = 'xinghe';
+    lines.push('name: ' + '"' + title + '"');
+    lines.push('profile-name: ' + '"' + title + '"');
     lines.push('mixed-port: ' + mixedPort);
     lines.push("allow-lan: " + allowLan);
     lines.push("bind-address: '*'");

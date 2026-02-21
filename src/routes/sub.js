@@ -47,7 +47,7 @@ async function handleSub(req, res, parsedUrl) {
         }
 
         const options = {
-            title: config.subscription.title || '代理订阅',
+            title: 'xinghe',
             httpPort: parseInt(parsedUrl.query.port) || config.defaults.httpPort,
             socksPort: parseInt(parsedUrl.query.socks) || config.defaults.socksPort,
             allowLan: parsedUrl.query.lan !== 'false',
@@ -62,14 +62,17 @@ async function handleSub(req, res, parsedUrl) {
 
         // 设置订阅响应头
         const subHeaders = generateSubscriptionHeaders();
-        const baseFilename = config.subscription.title ? `${config.subscription.title}${FORMAT_FILENAME[format].substring(FORMAT_FILENAME[format].lastIndexOf('.'))}` : FORMAT_FILENAME[format];
+        const ext = FORMAT_FILENAME[format].substring(FORMAT_FILENAME[format].lastIndexOf('.'));
+        const baseFilename = `xinghe${ext}`;
         const encodedFilename = encodeURIComponent(baseFilename);
 
-        const asciiFilename = FORMAT_FILENAME[format];
+        const asciiFilename = `xinghe${ext}`;
 
         res.writeHead(200, {
             'Content-Type': FORMAT_MIME[format],
             'Content-Disposition': `attachment; filename=${asciiFilename}; filename*=utf-8''${encodedFilename}`,
+            'profile-update-interval': String(config.subscription.updateInterval || 24),
+            'profile-title': Buffer.from('xinghe', 'utf-8').toString('base64'),
             ...subHeaders,
             'X-Proxy-Count': String(result.count)
         });
