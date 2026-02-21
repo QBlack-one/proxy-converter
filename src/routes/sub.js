@@ -47,6 +47,7 @@ async function handleSub(req, res, parsedUrl) {
         }
 
         const options = {
+            title: config.subscription.title || '代理订阅',
             httpPort: parseInt(parsedUrl.query.port) || config.defaults.httpPort,
             socksPort: parseInt(parsedUrl.query.socks) || config.defaults.socksPort,
             allowLan: parsedUrl.query.lan !== 'false',
@@ -61,9 +62,12 @@ async function handleSub(req, res, parsedUrl) {
 
         // 设置订阅响应头
         const subHeaders = generateSubscriptionHeaders();
+        const baseFilename = config.subscription.title ? `${config.subscription.title}${FORMAT_FILENAME[format].substring(FORMAT_FILENAME[format].lastIndexOf('.'))}` : FORMAT_FILENAME[format];
+        const encodedFilename = encodeURIComponent(baseFilename);
+
         res.writeHead(200, {
             'Content-Type': FORMAT_MIME[format],
-            'Content-Disposition': `attachment; filename="${FORMAT_FILENAME[format]}"`,
+            'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}`,
             ...subHeaders,
             'X-Proxy-Count': String(result.count)
         });

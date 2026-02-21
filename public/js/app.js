@@ -229,6 +229,7 @@ function renderSubscription(proxies) {
 
 function getConfigOptions() {
     return {
+        title: document.getElementById('subTitle') ? document.getElementById('subTitle').value : '',
         httpPort: parseInt(document.getElementById('cfgHttpPort').value) || 7890,
         socksPort: parseInt(document.getElementById('cfgSocksPort').value) || 7891,
         allowLan: document.getElementById('cfgAllowLan').value === 'true',
@@ -248,9 +249,17 @@ function downloadConfig() {
     const blob = new Blob([currentOutput], { type: fmt.mime + ';charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+
+    // 如果设置了标题，则使用标题作为文件名，否则使用默认 ext 的名称
+    const title = document.getElementById('subTitle') ? document.getElementById('subTitle').value.trim() : '';
+    const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+    const defaultName = `config_${dateStr}${fmt.ext}`;
+    a.download = title ? `${title}${fmt.ext}` : defaultName;
+
     a.href = url;
-    a.download = `config${fmt.ext}`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast(`💾 ${fmt.name} 配置已下载`, 'success');
 }

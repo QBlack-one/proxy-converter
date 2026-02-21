@@ -186,6 +186,10 @@ function generateClashConfig(proxies, options) {
     var lines = [];
 
     // ===== 基础配置 =====
+    var title = options.title || '代理订阅';
+    if (title) {
+        lines.push('profile-name: ' + flowVal(title));
+    }
     lines.push('mixed-port: ' + mixedPort);
     lines.push("allow-lan: " + allowLan);
     lines.push("bind-address: '*'");
