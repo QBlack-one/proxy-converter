@@ -962,6 +962,9 @@ function loadNodeList() {
         })
         .then(data => {
             countEl.textContent = `共 ${data.count} 个节点`;
+            const batchBar = document.getElementById('batchActionBar');
+            if (batchBar) batchBar.style.display = (!data.nodes || data.nodes.length === 0) ? 'none' : 'flex';
+
             if (!data.nodes || data.nodes.length === 0) {
                 container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)">暂无节点</div>';
                 return;
@@ -976,6 +979,7 @@ function loadNodeList() {
             container.innerHTML = data.nodes.map(node => {
                 const color = typeColors[node.type] || '#94a3b8';
                 return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">
+                    <input type="checkbox" class="node-checkbox" value="${node.index}" onchange="updateSelectedCount()" style="width:16px;height:16px;accent-color:var(--danger);cursor:pointer">
                     <span style="min-width:24px;color:var(--text-muted);font-size:11px">#${node.index}</span>
                     <span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;color:${color};background:${color}22">${node.type}</span>
                     <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(node.link)}">${esc(node.name)}</span>
@@ -983,6 +987,9 @@ function loadNodeList() {
                         onmouseover="this.style.background='rgba(239,68,68,0.25)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">✕ 删除</button>
                 </div>`;
             }).join('');
+
+            document.getElementById('selectAllNodes').checked = false;
+            updateSelectedCount();
         })
         .catch(e => {
             container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--danger)">加载失败: ${e.message}</div>`;
@@ -1004,6 +1011,65 @@ function deleteNode(index) {
             checkServerStatus();
         })
         .catch(e => showToast('❌ 删除失败: ' + e.message, 'error'));
+}
+
+function toggleSelectAllNodes(chk) {
+    const checkboxes = document.querySelectorAll('.node-checkbox');
+    checkboxes.forEach(cb => cb.checked = chk.checked);
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('.node-checkbox');
+    const count = document.querySelectorAll('.node-checkbox:checked').length;
+    const btn = document.getElementById('btnDeleteSelected');
+    const countSpan = document.getElementById('selectedCount');
+
+    if (countSpan) countSpan.textContent = count;
+
+    if (btn) {
+        if (count > 0) {
+            btn.style.opacity = '1';
+            btn.style.pointerEvents = 'auto';
+            btn.style.background = '#ef4444';
+            btn.style.color = '#fff';
+        } else {
+            btn.style.opacity = '0.5';
+            btn.style.pointerEvents = 'none';
+            btn.style.background = 'rgba(239,68,68,0.1)';
+            btn.style.color = '#ef4444';
+        }
+    }
+
+    const selectAll = document.getElementById('selectAllNodes');
+    if (selectAll) {
+        selectAll.checked = (count === checkboxes.length && checkboxes.length > 0);
+    }
+}
+
+function deleteSelectedNodes() {
+    const checkboxes = document.querySelectorAll('.node-checkbox:checked');
+    const indices = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+    if (indices.length === 0) return;
+    if (!confirm(`确定要批量删除这 ${indices.length} 个选中节点吗？\n（操作不可逆转）`)) return;
+
+    fetch(SUB_SERVER + '/api/nodes/batch-delete', getFetchOptions({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ indices })
+    }))
+        .then(async r => {
+            const data = await r.json();
+            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
+            return data;
+        })
+        .then(data => {
+            showToast(`✅ 已批量删除 ${data.removedCount} 个节点，剩余 ${data.remaining} 个节点`, 'success');
+            loadNodeList();
+            checkServerStatus();
+        })
+        .catch(e => showToast('❌ 批量删除失败: ' + e.message, 'error'));
 }
 
 function addSingleNode() {

@@ -368,6 +368,47 @@ async function handleApi(req, res, pathname, parsedUrl) {
         return true;
     }
 
+    // ===== POST /api/nodes/batch-delete =====
+    if (pathname === '/api/nodes/batch-delete' && req.method === 'POST') {
+        if (!requireAuth(req, res)) return true;
+        let body = '';
+        req.on('data', chunk => { body += chunk; if (body.length > MAX_REQUEST_SIZE) req.destroy(); });
+        await new Promise(resolve => req.on('end', resolve));
+        try {
+            const { indices } = JSON.parse(body);
+            if (!Array.isArray(indices)) {
+                res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ error: '请提供 indices 数组' }));
+                return true;
+            }
+            let raw = '';
+            try { raw = await fsPromises.readFile(LINKS_FILE, 'utf-8'); } catch (e) { }
+            const lines = raw.split('\n').filter(l => l.trim());
+
+            const uniqueIndices = [...new Set(indices)];
+            const validIndices = uniqueIndices.map(Number).filter(n => !isNaN(n) && n >= 0 && n < lines.length);
+            validIndices.sort((a, b) => b - a);
+
+            let removedCount = 0;
+            for (const idx of validIndices) {
+                lines.splice(idx, 1);
+                removedCount++;
+            }
+
+            await fsPromises.writeFile(LINKS_FILE, lines.join('\n'), 'utf-8');
+            await fsPromises.writeFile(META_FILE, JSON.stringify({
+                updatedAt: new Date().toISOString(), lineCount: lines.length, nodeCount: lines.length
+            }, null, 2), 'utf-8');
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, removedCount, remaining: lines.length }));
+            console.log(`[${time()}] 批量删除节点，共 ${removedCount} 个`);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return true;
+    }
+
     return false; // 未匹配任何 API 路由
 }
 
