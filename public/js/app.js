@@ -241,6 +241,17 @@ function getConfigOptions() {
     };
 }
 
+function buildConfigQueryString() {
+    const opts = getConfigOptions();
+    const params = new URLSearchParams();
+    if (opts.httpPort !== 7890) params.append('port', opts.httpPort);
+    if (opts.socksPort !== 7891) params.append('socks', opts.socksPort);
+    if (!opts.allowLan) params.append('lan', 'false');
+    if (opts.mode !== 'rule') params.append('mode', opts.mode);
+    const qs = params.toString();
+    return qs ? `&${qs}` : '';
+}
+
 // ==================== 操作函数 ====================
 
 function downloadConfig() {
@@ -1181,13 +1192,19 @@ function renderSubUrls(subUrls, totalCount, newCount) {
 
     grid.innerHTML = Object.entries(subUrls).map(([fmt, url]) => {
         const label = formatLabels[fmt] || { name: fmt, icon: '🔗', desc: '' };
-        return `<div class="sub-url-item" onclick="copyUrl('${url}')" title="点击复制">
+
+        let finalUrl = url;
+        if (fmt !== 'universal') {
+            finalUrl += buildConfigQueryString();
+        }
+
+        return `<div class="sub-url-item" onclick="copyUrl('${finalUrl}')" title="点击复制">
         <span class="sub-url-icon">${label.icon}</span>
         <div class="sub-url-info">
           <span class="sub-url-name">${label.name}</span>
           <span class="sub-url-desc">${label.desc}</span>
         </div>
-        <code class="sub-url-link">${url}</code>
+        <code class="sub-url-link">${finalUrl}</code>
         <span class="sub-url-copy">📋</span>
       </div>`;
     }).join('');
