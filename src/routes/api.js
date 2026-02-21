@@ -118,7 +118,9 @@ async function handleApi(req, res, pathname, parsedUrl) {
                         total: subConfig.traffic.total || 0,
                         percent: trafficPercent,
                         totalFormatted: trafficTotal > 0 ? formatTraffic(trafficTotal) : '∞',
-                        usedFormatted: formatTraffic(trafficUsed)
+                        usedFormatted: formatTraffic(trafficUsed),
+                        uploadFormatted: formatTraffic(subConfig.traffic.upload || 0),
+                        downloadFormatted: formatTraffic(subConfig.traffic.download || 0)
                     } : null
                 }
             }));
