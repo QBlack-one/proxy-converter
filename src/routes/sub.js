@@ -70,7 +70,7 @@ async function handleSub(req, res, parsedUrl) {
 
         res.writeHead(200, {
             'Content-Type': FORMAT_MIME[format],
-            'Content-Disposition': `attachment; filename=${asciiFilename}; filename*=utf-8''${encodedFilename}`,
+            'Content-Disposition': `inline; filename=${asciiFilename}; filename*=utf-8''${encodedFilename}`,
             'profile-update-interval': String(config.subscription.updateInterval || 24),
             'profile-title': Buffer.from('xinghe', 'utf-8').toString('base64'),
             ...subHeaders,
