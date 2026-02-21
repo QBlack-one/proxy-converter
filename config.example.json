@@ -27,12 +27,12 @@
       "enabled": true,
       "upload": 0,
       "download": 0,
-      "total": 107374182400,
+      "total": 0,
       "resetDay": 1
     },
     "expire": {
-      "enabled": true,
-      "timestamp": 1767225600
+      "enabled": false,
+      "timestamp": 0
     }
   },
   "autoUpdate": {
