@@ -415,9 +415,9 @@ async function handleApi(req, res, pathname, parsedUrl) {
         req.on('data', chunk => { body += chunk; if (body.length > MAX_REQUEST_SIZE) req.destroy(); });
         await new Promise(resolve => req.on('end', resolve));
         try {
-            const { index, newLink } = JSON.parse(body);
+            const { index, newName } = JSON.parse(body);
             const idx = parseInt(index);
-            if (isNaN(idx) || !newLink) {
+            if (isNaN(idx) || !newName) {
                 res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
                 res.end(JSON.stringify({ error: '无效的请求参数' }));
                 return true;
@@ -427,7 +427,18 @@ async function handleApi(req, res, pathname, parsedUrl) {
             const lines = raw.split('\n').filter(l => l.trim());
 
             if (idx >= 0 && idx < lines.length) {
-                lines[idx] = newLink.trim();
+                const oldLine = lines[idx];
+                const parts = oldLine.split(' ');
+
+                // 如果格式是 "<备注名称> vmess://..."
+                if (parts.length > 1 && parts[parts.length - 1].includes('://')) {
+                    const protocolAndUrl = parts.pop();
+                    lines[idx] = `${newName.trim()} ${protocolAndUrl}`;
+                } else if (oldLine.includes('://')) {
+                    lines[idx] = `${newName.trim()} ${oldLine}`;
+                } else {
+                    lines[idx] = `${newName.trim()} ${oldLine}`;
+                }
                 await fsPromises.writeFile(LINKS_FILE, lines.join('\n'), 'utf-8');
                 await fsPromises.writeFile(META_FILE, JSON.stringify({
                     updatedAt: new Date().toISOString(), lineCount: lines.length, nodeCount: lines.length
