@@ -408,6 +408,43 @@ async function handleApi(req, res, pathname, parsedUrl) {
         }
         return true;
     }
+    // ===== PUT /api/nodes =====
+    if (pathname === '/api/nodes' && req.method === 'PUT') {
+        if (!requireAuth(req, res)) return true;
+        let body = '';
+        req.on('data', chunk => { body += chunk; if (body.length > MAX_REQUEST_SIZE) req.destroy(); });
+        await new Promise(resolve => req.on('end', resolve));
+        try {
+            const { index, newLink } = JSON.parse(body);
+            const idx = parseInt(index);
+            if (isNaN(idx) || !newLink) {
+                res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ error: '无效的请求参数' }));
+                return true;
+            }
+            let raw = '';
+            try { raw = await fsPromises.readFile(LINKS_FILE, 'utf-8'); } catch (e) { }
+            const lines = raw.split('\n').filter(l => l.trim());
+
+            if (idx >= 0 && idx < lines.length) {
+                lines[idx] = newLink.trim();
+                await fsPromises.writeFile(LINKS_FILE, lines.join('\n'), 'utf-8');
+                await fsPromises.writeFile(META_FILE, JSON.stringify({
+                    updatedAt: new Date().toISOString(), lineCount: lines.length, nodeCount: lines.length
+                }, null, 2), 'utf-8');
+                res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ success: true, count: lines.length }));
+                console.log(`[${time()}] 修改节点 #${idx}`);
+            } else {
+                res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ error: '无效的索引' }));
+            }
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return true;
+    }
 
     return false; // 未匹配任何 API 路由
 }

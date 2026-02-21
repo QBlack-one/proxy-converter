@@ -987,14 +987,25 @@ function loadNodeList() {
 
             container.innerHTML = data.nodes.map(node => {
                 const color = typeColors[node.type] || '#94a3b8';
-                return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">
+                const escLink = esc(node.link);
+                const escName = esc(node.name);
+                return `
+                <div id="node-row-${node.index}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">
                     <input type="checkbox" class="node-checkbox" value="${node.index}" onchange="updateSelectedCount()" style="width:16px;height:16px;accent-color:var(--danger);cursor:pointer">
                     <span style="min-width:24px;color:var(--text-muted);font-size:11px">#${node.index}</span>
                     <span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;color:${color};background:${color}22">${node.type}</span>
-                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(node.link)}">${esc(node.name)}</span>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escLink}">${escName}</span>
+                    <button onclick="editNode(${node.index})" class="btn btn-sm btn-secondary" style="padding:4px 10px;font-size:12px;white-space:nowrap">✏️ 编辑</button>
                     <button onclick="deleteNode(${node.index})" style="background:rgba(239,68,68,0.1);color:#ef4444;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap"
                         onmouseover="this.style.background='rgba(239,68,68,0.25)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">✕ 删除</button>
-                </div>`;
+                </div>
+                <div id="node-edit-${node.index}" style="display:none;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;background:rgba(0,0,0,0.02)">
+                    <span style="min-width:24px;color:var(--text-muted);font-size:11px;text-align:center">#${node.index}</span>
+                    <input type="text" id="node-input-${node.index}" value="${escLink.replace(/"/g, '&quot;')}" style="flex:1;padding:6px 10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace">
+                    <button onclick="saveNodeEdit(${node.index})" class="btn btn-sm btn-success" style="padding:4px 10px;font-size:12px;white-space:nowrap">💾 保存</button>
+                    <button onclick="cancelNodeEdit(${node.index})" class="btn btn-sm btn-secondary" style="padding:4px 10px;font-size:12px;white-space:nowrap">✕ 取消</button>
+                </div>
+                `;
             }).join('');
 
             document.getElementById('selectAllNodes').checked = false;
@@ -1020,6 +1031,43 @@ function deleteNode(index) {
             checkServerStatus();
         })
         .catch(e => showToast('❌ 删除失败: ' + e.message, 'error'));
+}
+
+function editNode(index) {
+    document.getElementById(`node-row-${index}`).style.display = 'none';
+    document.getElementById(`node-edit-${index}`).style.display = 'flex';
+}
+
+function cancelNodeEdit(index) {
+    document.getElementById(`node-edit-${index}`).style.display = 'none';
+    document.getElementById(`node-row-${index}`).style.display = 'flex';
+}
+
+function saveNodeEdit(index) {
+    const inputEl = document.getElementById(`node-input-${index}`);
+    if (!inputEl) return;
+    const newLink = inputEl.value.trim();
+    if (!newLink) {
+        showToast('节点链接不能为空', 'warning');
+        return;
+    }
+
+    fetch(SUB_SERVER + '/api/nodes', getFetchOptions({
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index, newLink })
+    }))
+        .then(async r => {
+            const data = await r.json();
+            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
+            return data;
+        })
+        .then(data => {
+            showToast(`✅ 节点 #${index} 修改成功`, 'success');
+            loadNodeList();
+            checkServerStatus();
+        })
+        .catch(e => showToast('❌ 修改失败: ' + e.message, 'error'));
 }
 
 function toggleSelectAllNodes(chk) {
