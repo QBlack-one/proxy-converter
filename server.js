@@ -1083,7 +1083,7 @@ const server = http.createServer(async (req, res) => {
         const data = await fsPromises.readFile(filePath);
         res.writeHead(200, {
             'Content-Type': contentType,
-            'Cache-Control': 'public, max-age=3600'
+            'Cache-Control': 'no-cache'
         });
         res.end(data);
     } catch (e) {
