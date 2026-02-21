@@ -971,6 +971,105 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
+    // ===== GET /api/nodes - 列出所有已保存节点 =====
+    if (pathname === '/api/nodes' && req.method === 'GET') {
+        try {
+            let raw = '';
+            try { raw = await fsPromises.readFile(LINKS_FILE, 'utf-8'); } catch (e) { /* empty */ }
+            const lines = raw.split('\n').filter(l => l.trim());
+            // 解析每行链接为节点对象
+            const nodes = lines.map((line, index) => {
+                try {
+                    const result = convertLinks(line, 'raw');
+                    const node = result.nodeNames[0] || line.substring(0, 50);
+                    // 提取协议类型
+                    const proto = line.match(/^(\w+):\/\//);
+                    return { index, name: node, type: proto ? proto[1].toUpperCase() : 'UNKNOWN', link: line };
+                } catch (e) {
+                    return { index, name: line.substring(0, 50), type: 'UNKNOWN', link: line };
+                }
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, count: nodes.length, nodes }));
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // ===== DELETE /api/nodes?index=N - 删除指定节点 =====
+    if (pathname === '/api/nodes' && req.method === 'DELETE') {
+        if (!requireAuth(req, res)) return;
+        const idx = parseInt(parsedUrl.query.index);
+        if (isNaN(idx) || idx < 0) {
+            res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: '请提供有效的 index 参数' }));
+            return;
+        }
+        try {
+            let raw = '';
+            try { raw = await fsPromises.readFile(LINKS_FILE, 'utf-8'); } catch (e) { /* empty */ }
+            const lines = raw.split('\n').filter(l => l.trim());
+            if (idx >= lines.length) {
+                res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ error: '节点不存在' }));
+                return;
+            }
+            const removed = lines.splice(idx, 1)[0];
+            const newText = lines.join('\n');
+            await fsPromises.writeFile(LINKS_FILE, newText, 'utf-8');
+            await fsPromises.writeFile(META_FILE, JSON.stringify({
+                updatedAt: new Date().toISOString(), lineCount: lines.length, nodeCount: lines.length
+            }, null, 2), 'utf-8');
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, removed: removed.substring(0, 80), remaining: lines.length }));
+            console.log(`[${time()}] 删除节点 #${idx}`);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
+    // ===== POST /api/nodes - 添加单个节点 =====
+    if (pathname === '/api/nodes' && req.method === 'POST') {
+        if (!requireAuth(req, res)) return;
+        let body = '';
+        req.on('data', chunk => { body += chunk; if (body.length > MAX_REQUEST_SIZE) req.destroy(); });
+        await new Promise(resolve => req.on('end', resolve));
+        try {
+            const { link } = JSON.parse(body);
+            if (!link || !link.trim()) {
+                res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ error: '请提供 link 参数' }));
+                return;
+            }
+            const trimmed = link.trim();
+            // 读取已有链接检查是否重复
+            let raw = '';
+            try { raw = await fsPromises.readFile(LINKS_FILE, 'utf-8'); } catch (e) { /* empty */ }
+            const lines = raw.split('\n').filter(l => l.trim());
+            if (lines.includes(trimmed)) {
+                res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ error: '该节点已存在' }));
+                return;
+            }
+            lines.push(trimmed);
+            await fsPromises.writeFile(LINKS_FILE, lines.join('\n'), 'utf-8');
+            await fsPromises.writeFile(META_FILE, JSON.stringify({
+                updatedAt: new Date().toISOString(), lineCount: lines.length, nodeCount: lines.length
+            }, null, 2), 'utf-8');
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, count: lines.length }));
+            console.log(`[${time()}] 添加节点，共 ${lines.length} 个`);
+        } catch (e) {
+            res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ error: e.message }));
+        }
+        return;
+    }
+
     // ===== 静态文件服务（异步） =====
     let filePath = pathname === '/' ? '/index.html' : pathname;
     filePath = path.join(__dirname, filePath);

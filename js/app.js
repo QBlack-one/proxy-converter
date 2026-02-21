@@ -935,3 +935,100 @@ function clearAllNodes() {
         })
         .catch(e => showToast('❌ 清空失败: ' + e.message, 'error'));
 }
+
+// ==================== 节点管理 ====================
+
+function toggleNodeManage() {
+    const panel = document.getElementById('nodeManagePanel');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        loadNodeList();
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function loadNodeList() {
+    const container = document.getElementById('nodeManageList');
+    const countEl = document.getElementById('nodeManageCount');
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)">加载中...</div>';
+
+    fetch(SUB_SERVER + '/api/nodes', { mode: 'cors' })
+        .then(async r => {
+            const data = await r.json();
+            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
+            return data;
+        })
+        .then(data => {
+            countEl.textContent = `共 ${data.count} 个节点`;
+            if (!data.nodes || data.nodes.length === 0) {
+                container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)">暂无节点</div>';
+                return;
+            }
+
+            const typeColors = {
+                VMESS: '#818cf8', VLESS: '#34d399', SS: '#60a5fa',
+                SSR: '#f472b6', TROJAN: '#fbbf24', HYSTERIA: '#fb923c',
+                HYSTERIA2: '#c4b5fd', TUIC: '#2dd4bf', WIREGUARD: '#a3e635', HY2: '#c4b5fd', WG: '#a3e635'
+            };
+
+            container.innerHTML = data.nodes.map(node => {
+                const color = typeColors[node.type] || '#94a3b8';
+                return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">
+                    <span style="min-width:24px;color:var(--text-muted);font-size:11px">#${node.index}</span>
+                    <span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;color:${color};background:${color}22">${node.type}</span>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(node.link)}">${esc(node.name)}</span>
+                    <button onclick="deleteNode(${node.index})" style="background:rgba(239,68,68,0.1);color:#ef4444;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap"
+                        onmouseover="this.style.background='rgba(239,68,68,0.25)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">✕ 删除</button>
+                </div>`;
+            }).join('');
+        })
+        .catch(e => {
+            container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--danger)">加载失败: ${e.message}</div>`;
+        });
+}
+
+function deleteNode(index) {
+    if (!confirm(`确定要删除节点 #${index} 吗？`)) return;
+
+    fetch(SUB_SERVER + `/api/nodes?index=${index}`, getFetchOptions({ method: 'DELETE' }))
+        .then(async r => {
+            const data = await r.json();
+            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
+            return data;
+        })
+        .then(data => {
+            showToast(`✅ 已删除，剩余 ${data.remaining} 个节点`, 'success');
+            loadNodeList();
+            checkServerStatus();
+        })
+        .catch(e => showToast('❌ 删除失败: ' + e.message, 'error'));
+}
+
+function addSingleNode() {
+    const input = document.getElementById('addNodeInput');
+    const link = input.value.trim();
+    if (!link) {
+        showToast('请输入节点链接', 'error');
+        return;
+    }
+
+    fetch(SUB_SERVER + '/api/nodes', getFetchOptions({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ link })
+    }))
+        .then(async r => {
+            const data = await r.json();
+            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
+            return data;
+        })
+        .then(data => {
+            showToast(`✅ 已添加，共 ${data.count} 个节点`, 'success');
+            input.value = '';
+            loadNodeList();
+            checkServerStatus();
+        })
+        .catch(e => showToast('❌ 添加失败: ' + e.message, 'error'));
+}

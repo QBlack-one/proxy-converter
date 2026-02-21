@@ -58,14 +58,16 @@
             <div class="card-title">
                 <div class="icon" style="background:rgba(139,92,246,0.15)">📊</div>
                 订阅信息管理
-                <button class="btn btn-sm btn-secondary" onclick="toggleSubManage()" style="margin-left:auto">✕ 关闭</button>
+                <button class="btn btn-sm btn-secondary" onclick="toggleSubManage()" style="margin-left:auto">✕
+                    关闭</button>
             </div>
             <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">
                 配置订阅流量和到期时间信息，客户端会自动读取这些信息。
             </p>
 
             <!-- API 密钥设置 -->
-            <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:12px;margin-bottom:16px">
+            <div
+                style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:12px;margin-bottom:16px">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
                     <span style="font-size:12px;font-weight:600;color:#f59e0b">🔐 API 密钥</span>
                     <span style="font-size:11px;color:var(--text-muted)">(可选，用于保护管理接口)</span>
@@ -265,8 +267,34 @@
                 <div class="btn-row" style="margin-bottom:16px">
                     <button class="btn btn-primary" onclick="saveToSubService()" id="btnSaveSub">💾 保存当前节点到订阅服务</button>
                     <button class="btn btn-secondary" onclick="toggleSubManage()" id="btnManageSub">⚙️ 管理订阅信息</button>
+                    <button class="btn btn-secondary" onclick="toggleNodeManage()">📋 节点管理</button>
                     <button class="btn btn-danger" onclick="clearAllNodes()">🗑️ 清空所有节点</button>
                     <span id="saveStatus" style="font-size:12px;color:var(--text-muted);align-self:center"></span>
+                </div>
+
+                <!-- 节点管理面板 -->
+                <div id="nodeManagePanel" style="display:none;margin-bottom:16px">
+                    <div
+                        style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:16px">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                            <span style="font-weight:600;font-size:14px">📋 订阅节点管理</span>
+                            <div style="display:flex;gap:8px;align-items:center">
+                                <span id="nodeManageCount" style="font-size:12px;color:var(--text-muted)"></span>
+                                <button class="btn btn-sm btn-secondary" onclick="toggleNodeManage()">✕ 关闭</button>
+                            </div>
+                        </div>
+
+                        <!-- 添加节点 -->
+                        <div style="display:flex;gap:8px;margin-bottom:12px">
+                            <input type="text" id="addNodeInput"
+                                placeholder="粘贴协议链接（vmess:// vless:// ss:// trojan:// ...）"
+                                style="flex:1;padding:8px 12px;background:var(--bg-primary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:13px;font-family:monospace">
+                            <button class="btn btn-sm btn-success" onclick="addSingleNode()">➕ 添加</button>
+                        </div>
+
+                        <!-- 节点列表 -->
+                        <div id="nodeManageList" style="max-height:400px;overflow-y:auto"></div>
+                    </div>
                 </div>
 
                 <!-- 订阅 URL 列表 -->
@@ -286,10 +314,12 @@
                 <div class="history-section">
                     <div class="history-title">
                         <span>📜 上传历史</span>
-                        <button class="btn btn-sm btn-danger" onclick="clearHistory()" style="margin-left:auto">🗑️ 清空</button>
+                        <button class="btn btn-sm btn-danger" onclick="clearHistory()" style="margin-left:auto">🗑️
+                            清空</button>
                     </div>
                     <div id="historyList" class="history-list">
-                        <div class="empty-state" style="padding: 20px; text-align: center; color: var(--text-muted);">暂无上传记录</div>
+                        <div class="empty-state" style="padding: 20px; text-align: center; color: var(--text-muted);">
+                            暂无上传记录</div>
                     </div>
                 </div>
             </div>
