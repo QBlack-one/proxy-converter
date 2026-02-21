@@ -246,6 +246,11 @@ function generateClashConfig(proxies, options) {
 function getClashRules(proxyGroup) {
     var P = proxyGroup;
     return [
+        'GEOSITE,private,DIRECT',
+        'GEOIP,LAN,DIRECT,no-resolve',
+        'GEOSITE,cn,DIRECT',
+        'GEOIP,CN,DIRECT,no-resolve',
+
         // Google DNS 直连到代理
         'IP-CIDR,1.1.1.1/32,' + P + ',no-resolve',
         'IP-CIDR,8.8.8.8/32,' + P + ',no-resolve',

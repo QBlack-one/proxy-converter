@@ -63,15 +63,9 @@ function generateClashMetaConfig(proxies, options = {}) {
     lines.push('    - ' + flowObj(autoGroup));
     lines.push('    - ' + flowObj(fallbackGroup));
 
-    // ===== Rules (GEOSITE 精简版) =====
+    // ===== Rules =====
     lines.push('rules:');
-    const metaRules = [
-        'GEOSITE,private,DIRECT',
-        'GEOIP,LAN,DIRECT,no-resolve',
-        'GEOSITE,cn,DIRECT',
-        'GEOIP,CN,DIRECT,no-resolve',
-        'MATCH,' + groupName
-    ];
+    const metaRules = getClashRules(groupName);
     for (const r of metaRules) {
         lines.push("    - '" + r + "'");
     }
