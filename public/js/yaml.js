@@ -188,7 +188,8 @@ function generateClashConfig(proxies, options) {
     // ===== 基础配置 =====
     var title = options.title || '代理订阅';
     if (title) {
-        lines.push('profile-name: ' + flowVal(title));
+        lines.push('name: ' + '"' + title + '"');
+        lines.push('profile-name: ' + '"' + title + '"');
     }
     lines.push('mixed-port: ' + mixedPort);
     lines.push("allow-lan: " + allowLan);

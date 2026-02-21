@@ -65,9 +65,11 @@ async function handleSub(req, res, parsedUrl) {
         const baseFilename = config.subscription.title ? `${config.subscription.title}${FORMAT_FILENAME[format].substring(FORMAT_FILENAME[format].lastIndexOf('.'))}` : FORMAT_FILENAME[format];
         const encodedFilename = encodeURIComponent(baseFilename);
 
+        const asciiFilename = FORMAT_FILENAME[format];
+
         res.writeHead(200, {
             'Content-Type': FORMAT_MIME[format],
-            'Content-Disposition': `attachment; filename*=UTF-8''${encodedFilename}`,
+            'Content-Disposition': `attachment; filename=${asciiFilename}; filename*=utf-8''${encodedFilename}`,
             ...subHeaders,
             'X-Proxy-Count': String(result.count)
         });

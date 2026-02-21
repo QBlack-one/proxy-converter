@@ -19,7 +19,8 @@ function generateClashMetaConfig(proxies, options = {}) {
     // ===== 基础配置 =====
     const title = options.title || '代理订阅';
     if (title) {
-        lines.push('profile-name: ' + title);
+        lines.push('name: ' + '"' + title + '"');
+        lines.push('profile-name: ' + '"' + title + '"');
     }
     lines.push('mixed-port: ' + httpPort);
     lines.push('allow-lan: ' + allowLan);
