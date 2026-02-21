@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>代理订阅转换器 - 多格式配置生成</title>
+    <meta name="description"
+        content="支持 VMess/VLESS/SS/SSR/Trojan/Hysteria/Hysteria2/TUIC/WireGuard 9种协议，转换为 Clash/Surge/Sing-Box/订阅链接等多种格式">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+    <div class="container">
+
+        <!-- Header -->
+        <header class="header">
+            <h1>⚡ 代理订阅转换器</h1>
+            <p>9 种协议解析 · 6 种输出格式 · 一键生成订阅链接</p>
+            <div class="protocol-badges">
+                <span class="protocol-badge badge-vmess">🔷 VMess</span>
+                <span class="protocol-badge badge-vless">🟢 VLESS</span>
+                <span class="protocol-badge badge-ss">🔵 SS</span>
+                <span class="protocol-badge badge-ssr">🩷 SSR</span>
+                <span class="protocol-badge badge-trojan">🟡 Trojan</span>
+                <span class="protocol-badge badge-hy">🟠 Hysteria</span>
+                <span class="protocol-badge badge-hy2">🟣 Hysteria2</span>
+                <span class="protocol-badge badge-tuic">🩵 TUIC</span>
+                <span class="protocol-badge badge-wg">🟩 WireGuard</span>
+            </div>
+        </header>
+
+        <!-- Input Card -->
+        <div class="card">
+            <div class="card-title">
+                <div class="icon icon-input">📋</div>
+                输入源
+                <span class="text-muted" style="margin-left:auto;font-size:12px">支持拖拽文件 · Ctrl+Enter 快速转换</span>
+            </div>
+            <div class="input-wrapper" id="inputWrapper">
+                <textarea id="inputArea"
+                    placeholder="在此粘贴代理链接（每行一个），支持以下格式：&#10;&#10;  vmess:// · vless:// · ss:// · ssr://&#10;  trojan:// · hysteria:// · hysteria2:// (hy2://)&#10;  tuic:// · wireguard:// (wg://)&#10;&#10;也支持直接粘贴 Base64 编码的订阅内容，或拖入配置文件"></textarea>
+                <div class="drop-zone-overlay" id="dropOverlay">
+                    <span>📄 松开以加载文件</span>
+                </div>
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-primary" id="btnConvert" onclick="convert()">🔄 转换</button>
+                <button class="btn btn-secondary" onclick="pasteFromClipboard()">📎 粘贴</button>
+                <button class="btn btn-secondary" onclick="loadSample()">📦 示例数据</button>
+                <button class="btn btn-danger" onclick="clearAll()">🗑️ 清空</button>
+            </div>
+        </div>
+
+        <!-- 订阅信息管理 Card -->
+        <div class="card" id="subManageCard" style="display:none">
+            <div class="card-title">
+                <div class="icon" style="background:rgba(139,92,246,0.15)">📊</div>
+                订阅信息管理
+                <button class="btn btn-sm btn-secondary" onclick="toggleSubManage()" style="margin-left:auto">✕ 关闭</button>
+            </div>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">
+                配置订阅流量和到期时间信息，客户端会自动读取这些信息。
+            </p>
+
+            <!-- API 密钥设置 -->
+            <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:12px;margin-bottom:16px">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                    <span style="font-size:12px;font-weight:600;color:#f59e0b">🔐 API 密钥</span>
+                    <span style="font-size:11px;color:var(--text-muted)">(可选，用于保护管理接口)</span>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <input type="password" id="apiKeyInput" placeholder="留空则不启用认证"
+                        style="flex:1;padding:8px 12px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-size:13px">
+                    <button class="btn btn-sm btn-secondary" onclick="saveApiKey()">保存密钥</button>
+                </div>
+                <p style="font-size:11px;color:var(--text-muted);margin-top:6px;margin-bottom:0">
+                    💡 设置后，所有管理操作需要提供此密钥。密钥保存在浏览器本地。
+                </p>
+            </div>
+
+            <div class="config-grid">
+                <div class="config-item" style="grid-column: 1 / -1">
+                    <label>订阅名称</label>
+                    <input type="text" id="subTitle" placeholder="我的代理订阅">
+                </div>
+
+                <div class="config-item">
+                    <label>更新间隔（小时）</label>
+                    <input type="number" id="subUpdateInterval" value="24" min="1" max="168">
+                </div>
+
+                <div class="config-item">
+                    <label>启用流量统计</label>
+                    <select id="subTrafficEnabled" onchange="toggleTrafficInputs()">
+                        <option value="true">是</option>
+                        <option value="false">否</option>
+                    </select>
+                </div>
+
+                <div class="config-item" id="trafficUploadGroup">
+                    <label>已上传（GB）</label>
+                    <input type="number" id="subTrafficUpload" value="0" min="0" step="0.01">
+                </div>
+
+                <div class="config-item" id="trafficDownloadGroup">
+                    <label>已下载（GB）</label>
+                    <input type="number" id="subTrafficDownload" value="0" min="0" step="0.01">
+                </div>
+
+                <div class="config-item" id="trafficTotalGroup">
+                    <label>总流量（GB）</label>
+                    <input type="number" id="subTrafficTotal" value="100" min="0" step="1">
+                </div>
+
+                <div class="config-item" id="trafficResetGroup">
+                    <label>每月重置日期</label>
+                    <input type="number" id="subTrafficResetDay" value="1" min="1" max="31">
+                </div>
+            </div>
+
+            <div class="btn-row" style="margin-top:16px">
+                <button class="btn btn-success" onclick="saveSubConfig()">💾 保存配置</button>
+                <button class="btn btn-secondary" onclick="loadSubConfig()">🔄 重新加载</button>
+                <button class="btn btn-danger" onclick="resetTraffic()">🔄 重置流量</button>
+            </div>
+        </div>
+
+        <!-- Config Card -->
+        <div class="card">
+            <div class="card-title">
+                <div class="icon icon-settings">⚙️</div>
+                配置选项
+            </div>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label>HTTP 端口</label>
+                    <input type="number" id="cfgHttpPort" value="7890" min="1" max="65535">
+                </div>
+                <div class="config-item">
+                    <label>SOCKS5 端口</label>
+                    <input type="number" id="cfgSocksPort" value="7891" min="1" max="65535">
+                </div>
+                <div class="config-item">
+                    <label>代理模式</label>
+                    <select id="cfgMode">
+                        <option value="rule" selected>Rule（规则）</option>
+                        <option value="global">Global（全局）</option>
+                        <option value="direct">Direct（直连）</option>
+                    </select>
+                </div>
+                <div class="config-item">
+                    <label>允许局域网</label>
+                    <select id="cfgAllowLan">
+                        <option value="true" selected>是</option>
+                        <option value="false">否</option>
+                    </select>
+                </div>
+                <div class="config-item">
+                    <label>日志级别</label>
+                    <select id="cfgLogLevel">
+                        <option value="silent">Silent</option>
+                        <option value="error">Error</option>
+                        <option value="warning">Warning</option>
+                        <option value="info" selected>Info</option>
+                        <option value="debug">Debug</option>
+                    </select>
+                </div>
+                <div class="config-item">
+                    <label>DNS 增强</label>
+                    <select id="cfgDns">
+                        <option value="true" selected>启用 (fake-ip)</option>
+                        <option value="false">禁用</option>
+                    </select>
+                </div>
+                <div class="config-item">
+                    <label>测速间隔 (秒)</label>
+                    <input type="number" id="cfgInterval" value="300" min="30" max="3600">
+                </div>
+                <div class="config-item">
+                    <label>自动去重</label>
+                    <label
+                        style="text-transform:none;display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
+                        <input type="checkbox" id="cfgDedupe" checked
+                            style="width:16px;height:16px;accent-color:var(--accent-1)">
+                        <span style="font-size:13px;color:var(--text-secondary)">移除重复节点</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="hidden">
+
+            <!-- Stats -->
+            <div class="card">
+                <div class="card-title">
+                    <div class="icon icon-nodes">📊</div>
+                    解析结果
+                </div>
+                <div class="stats-row" id="statsRow"></div>
+            </div>
+
+            <!-- Node List -->
+            <div class="card">
+                <div class="card-title">
+                    <div class="icon icon-nodes">🌐</div>
+                    节点列表
+                    <span id="nodeCount" class="text-muted" style="margin-left:auto"></span>
+                </div>
+                <div class="filter-bar">
+                    <input type="text" class="search-input" id="searchInput" placeholder="搜索节点名称、服务器地址..."
+                        oninput="onSearchInput()">
+                    <div id="filterChips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+                </div>
+                <div class="node-grid" id="nodeGrid"></div>
+            </div>
+
+            <!-- Output Card with Format Tabs -->
+            <div class="card">
+                <div class="card-title">
+                    <div class="icon icon-output">📄</div>
+                    配置输出
+                </div>
+
+                <!-- Format Tabs -->
+                <div class="format-tabs">
+                    <button class="format-tab active" data-format="clash-yaml">Clash YAML</button>
+                    <button class="format-tab" data-format="clash-meta">Clash Meta</button>
+                    <button class="format-tab" data-format="surge">Surge</button>
+                    <button class="format-tab" data-format="sing-box">Sing-Box</button>
+                    <button class="format-tab" data-format="base64">Base64 订阅</button>
+                    <button class="format-tab" data-format="raw">原始链接</button>
+                </div>
+
+                <div class="output-preview" id="outputPreview"></div>
+
+                <div class="btn-row">
+                    <button class="btn btn-success" id="btnDownload" onclick="downloadConfig()">💾 下载 Clash
+                        (.yaml)</button>
+                    <button class="btn btn-secondary" onclick="copyConfig()">📋 复制配置</button>
+                </div>
+            </div>
+
+            <!-- 订阅服务面板 -->
+            <div class="card" id="subServiceCard">
+                <div class="card-title">
+                    <div class="icon" style="background:rgba(99,102,241,0.15)">🌐</div>
+                    订阅链接服务
+                    <span id="serverStatus" class="server-status offline">● 未启动</span>
+                </div>
+                <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">
+                    将当前转换的节点保存到本地服务，生成可供代理客户端订阅的链接。
+                    更新节点后重新保存，客户端刷新订阅即可获取最新节点。
+                    <br>终端运行 <code
+                        style="background:rgba(99,102,241,0.15);padding:2px 8px;border-radius:4px;font-size:12px">node server.js</code>
+                    启动服务。
+                </p>
+
+                <!-- 订阅信息统计 -->
+                <div id="subInfoStats" class="sub-info-stats" style="display:none"></div>
+
+                <!-- 保存按钮 -->
+                <div class="btn-row" style="margin-bottom:16px">
+                    <button class="btn btn-primary" onclick="saveToSubService()" id="btnSaveSub">💾 保存当前节点到订阅服务</button>
+                    <button class="btn btn-secondary" onclick="toggleSubManage()" id="btnManageSub">⚙️ 管理订阅信息</button>
+                    <span id="saveStatus" style="font-size:12px;color:var(--text-muted);align-self:center"></span>
+                </div>
+
+                <!-- 订阅 URL 列表 -->
+                <div id="subUrlList" class="sub-url-list" style="display:none">
+                    <label
+                        style="font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;display:block">
+                        📋 订阅链接（点击复制，添加到客户端）
+                    </label>
+                    <div class="sub-url-grid" id="subUrlGrid"></div>
+                    <p class="sub-url-tip">
+                        💡 将以上任意链接添加到 Clash / Shadowrocket / V2RayN 等客户端的「订阅管理」中。
+                        更新节点时，在此页面重新粘贴链接 → 转换 → 保存，客户端刷新订阅即可。
+                    </p>
+                </div>
+
+                <!-- 上传历史记录 -->
+                <div class="history-section">
+                    <div class="history-title">
+                        <span>📜 上传历史</span>
+                        <button class="btn btn-sm btn-danger" onclick="clearHistory()" style="margin-left:auto">🗑️ 清空</button>
+                    </div>
+                    <div id="historyList" class="history-list">
+                        <div class="empty-state" style="padding: 20px; text-align: center; color: var(--text-muted);">暂无上传记录</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 一键导入客户端 -->
+            <div class="card">
+                <div class="card-title">
+                    <div class="icon icon-sub">📲</div>
+                    一键导入客户端
+                    <span id="subLinkCount" class="text-muted" style="margin-left:auto"></span>
+                </div>
+                <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">
+                    点击对应客户端按钮，一键导入配置。移动端可扫描 QR 码导入。
+                </p>
+
+                <!-- 客户端按钮网格 -->
+                <div class="client-grid">
+                    <button class="client-btn" onclick="importToClient('clash')"
+                        title="适用于 Clash for Windows / Clash Verge / Mihomo Party">
+                        <span class="client-icon" style="background:rgba(99,102,241,0.15);color:#818cf8">⚔️</span>
+                        <span class="client-name">Clash</span>
+                        <span class="client-desc">YAML 配置</span>
+                    </button>
+                    <button class="client-btn" onclick="importToClient('clash-meta')"
+                        title="适用于 Mihomo / Clash Meta / Clash Verge Rev">
+                        <span class="client-icon" style="background:rgba(139,92,246,0.15);color:#a78bfa">🌀</span>
+                        <span class="client-name">Clash Meta</span>
+                        <span class="client-desc">Mihomo 扩展</span>
+                    </button>
+                    <button class="client-btn" onclick="importToClient('shadowrocket')" title="适用于 Shadowrocket (iOS)">
+                        <span class="client-icon" style="background:rgba(59,130,246,0.15);color:#60a5fa">🚀</span>
+                        <span class="client-name">Shadowrocket</span>
+                        <span class="client-desc">iOS 小火箭</span>
+                    </button>
+                    <button class="client-btn" onclick="importToClient('v2rayn')"
+                        title="适用于 V2RayN / V2RayNG / Nekoray">
+                        <span class="client-icon" style="background:rgba(16,185,129,0.15);color:#34d399">🛡️</span>
+                        <span class="client-name">V2RayN/NG</span>
+                        <span class="client-desc">复制订阅到剪贴板</span>
+                    </button>
+                    <button class="client-btn" onclick="importToClient('surge')" title="适用于 Surge (iOS/macOS)">
+                        <span class="client-icon" style="background:rgba(245,158,11,0.15);color:#fbbf24">🌊</span>
+                        <span class="client-name">Surge</span>
+                        <span class="client-desc">INI 配置</span>
+                    </button>
+                    <button class="client-btn" onclick="importToClient('singbox')" title="适用于 Sing-Box / NekoBox">
+                        <span class="client-icon" style="background:rgba(45,212,191,0.15);color:#2dd4bf">📦</span>
+                        <span class="client-name">Sing-Box</span>
+                        <span class="client-desc">JSON 配置</span>
+                    </button>
+                    <button class="client-btn" onclick="importToClient('quantumultx')" title="适用于 Quantumult X (iOS)">
+                        <span class="client-icon" style="background:rgba(236,72,153,0.15);color:#f472b6">🔮</span>
+                        <span class="client-name">Quantumult X</span>
+                        <span class="client-desc">复制节点到剪贴板</span>
+                    </button>
+                    <button class="client-btn" onclick="importToClient('raw-clipboard')" title="复制原始协议链接">
+                        <span class="client-icon" style="background:rgba(163,230,53,0.15);color:#a3e635">📋</span>
+                        <span class="client-name">通用复制</span>
+                        <span class="client-desc">原始链接</span>
+                    </button>
+                </div>
+
+                <!-- QR 码区域 -->
+                <div class="qr-section" id="qrSection" style="display:none">
+                    <div class="qr-header">
+                        <span class="qr-title">📱 扫码导入 <span id="qrClientName"
+                                style="color:var(--accent-3)"></span></span>
+                        <button class="btn btn-sm btn-secondary" onclick="closeQR()">✕ 关闭</button>
+                    </div>
+                    <div class="qr-body">
+                        <div id="qrCanvas" class="qr-canvas"></div>
+                        <p class="qr-tip" id="qrTip">使用客户端扫描此 QR 码导入配置</p>
+                    </div>
+                </div>
+
+                <!-- 订阅内容 -->
+                <details class="sub-details">
+                    <summary>📄 查看 Base64 订阅内容</summary>
+                    <textarea class="sub-textarea" id="subBase64" readonly placeholder="转换后生成的 Base64 订阅内容"></textarea>
+                    <div class="btn-row">
+                        <button class="btn btn-primary btn-sm" onclick="copySubscription()">📋 复制 Base64 订阅</button>
+                        <button class="btn btn-secondary btn-sm" onclick="copyRawLinks()">🔗 复制原始链接</button>
+                        <button class="btn btn-secondary btn-sm" onclick="showQR('sub')">📱 生成 QR 码</button>
+                    </div>
+                </details>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- QR Code 库 -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+
+    <!-- Scripts (顺序: parsers → encoders → yaml → generators → app) -->
+    <script src="js/parsers.js"></script>
+    <script src="js/encoders.js"></script>
+    <script src="js/yaml.js"></script>
+    <script src="js/generators.js"></script>
+    <script src="js/app.js"></script>
+
+</body>
+
+</html>

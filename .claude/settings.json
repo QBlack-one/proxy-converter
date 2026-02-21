@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(curl:*)",
+      "Bash(tasklist:*)",
+      "Bash(taskkill //F //PID 58632)",
+      "Bash(taskkill:*)",
+      "Bash(netstat:*)"
+    ]
+  }
+}

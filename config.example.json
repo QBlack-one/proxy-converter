@@ -1,0 +1,46 @@
+{
+  "port": 3456,
+  "dataDir": "./data",
+  "security": {
+    "maxRequestSize": 10485760,
+    "maxLinksCount": 10000,
+    "maxLinkLength": 8192,
+    "apiKey": "",
+    "enableAuth": false
+  },
+  "server": {
+    "allowLan": true,
+    "cors": true
+  },
+  "defaults": {
+    "httpPort": 7890,
+    "socksPort": 7891,
+    "mode": "rule",
+    "logLevel": "info",
+    "enableDns": true,
+    "testInterval": 300
+  },
+  "subscription": {
+    "title": "我的代理订阅",
+    "updateInterval": 24,
+    "traffic": {
+      "enabled": true,
+      "upload": 0,
+      "download": 0,
+      "total": 107374182400,
+      "resetDay": 1
+    },
+    "expire": {
+      "enabled": true,
+      "timestamp": 1767225600
+    }
+  },
+  "autoUpdate": {
+    "enabled": false,
+    "interval": 3600,
+    "sources": [
+      "https://example.com/subscription1",
+      "https://example.com/subscription2"
+    ]
+  }
+}

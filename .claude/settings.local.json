@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(start:*)",
+      "Read(//d/桌面/Desktop/666/chajian/proxy-converter/**)",
+      "Bash(python:*)",
+      "Bash(node:*)"
+    ]
+  }
+}
