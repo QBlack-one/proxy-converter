@@ -14,7 +14,13 @@ const STATIC_MIME = {
 };
 
 async function handleStatic(req, res, pathname) {
-    let filePath = pathname === '/' ? '/index.html' : pathname;
+    if (pathname === '/') {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Welcome to nginx!');
+        return;
+    }
+
+    let filePath = pathname === '/xinghe' ? '/index.html' : pathname;
     filePath = path.join(PUBLIC_DIR, filePath);
 
     if (!filePath.startsWith(PUBLIC_DIR)) {

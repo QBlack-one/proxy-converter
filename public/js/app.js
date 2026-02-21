@@ -1001,7 +1001,7 @@ function loadNodeList() {
                 </div>
                 <div id="node-edit-${node.index}" style="display:none;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;background:rgba(0,0,0,0.02)">
                     <span style="min-width:24px;color:var(--text-muted);font-size:11px;text-align:center">#${node.index}</span>
-                    <input type="text" id="node-input-${node.index}" value="${escLink.replace(/"/g, '&quot;')}" style="flex:1;padding:6px 10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace">
+                    <input type="text" id="node-input-${node.index}" value="${escName.replace(/"/g, '&quot;')}" placeholder="请输入新的节点名称..." style="flex:1;padding:6px 10px;background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);font-size:12px;font-family:monospace">
                     <button onclick="saveNodeEdit(${node.index})" class="btn btn-sm btn-success" style="padding:4px 10px;font-size:12px;white-space:nowrap">💾 保存</button>
                     <button onclick="cancelNodeEdit(${node.index})" class="btn btn-sm btn-secondary" style="padding:4px 10px;font-size:12px;white-space:nowrap">✕ 取消</button>
                 </div>
@@ -1046,16 +1046,16 @@ function cancelNodeEdit(index) {
 function saveNodeEdit(index) {
     const inputEl = document.getElementById(`node-input-${index}`);
     if (!inputEl) return;
-    const newLink = inputEl.value.trim();
-    if (!newLink) {
-        showToast('节点链接不能为空', 'warning');
+    const newName = inputEl.value.trim();
+    if (!newName) {
+        showToast('节点名称不能为空', 'warning');
         return;
     }
 
     fetch(SUB_SERVER + '/api/nodes', getFetchOptions({
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index, newLink })
+        body: JSON.stringify({ index, newName })
     }))
         .then(async r => {
             const data = await r.json();
