@@ -285,14 +285,32 @@ function copyRawLinks() {
 }
 
 function writeClipboard(text) {
-    navigator.clipboard.writeText(text).catch(() => {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).catch(() => {
+            fallbackCopyTextToClipboard(text);
+        });
+    } else {
+        fallbackCopyTextToClipboard(text);
+    }
+}
+
+function fallbackCopyTextToClipboard(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    // 避免在页面底部出现闪烁，并确保可以被选中
+    ta.style.top = "0";
+    ta.style.left = "0";
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
         document.execCommand('copy');
-        document.body.removeChild(ta);
-    });
+    } catch (err) {
+        console.error('Fallback: Oops, unable to copy', err);
+    }
+    document.body.removeChild(ta);
 }
 
 async function pasteFromClipboard() {
