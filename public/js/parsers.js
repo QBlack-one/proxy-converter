@@ -5,6 +5,12 @@
 
 // ==================== Base64 工具 ====================
 
+function safeDecode(str) {
+    if (!str) return '';
+    try { return decodeURIComponent(str); }
+    catch (e) { try { return unescape(str); } catch(e2) { return str; } }
+}
+
 function b64Decode(str) {
     try {
         str = str.trim().replace(/\s/g, '');
@@ -70,7 +76,7 @@ function parseVless(link) {
         const url = new URL(link);
         const params = url.searchParams;
         const proxy = {
-            name: decodeURIComponent(url.hash.slice(1)) || 'VLESS Node',
+            name: safeDecode(url.hash.slice(1)) || 'VLESS Node',
             type: 'vless',
             server: url.hostname,
             port: parseInt(url.port),
@@ -116,7 +122,7 @@ function parseSS(link) {
         let remark = 'SS Node';
         if (base.includes('#')) {
             const idx = base.indexOf('#');
-            remark = decodeURIComponent(base.substring(idx + 1));
+            remark = safeDecode(base.substring(idx + 1));
             base = base.substring(0, idx);
         }
         let method, password, server, port;
@@ -194,11 +200,11 @@ function parseTrojan(link) {
         const url = new URL(link);
         const params = url.searchParams;
         const proxy = {
-            name: decodeURIComponent(url.hash.slice(1)) || 'Trojan Node',
+            name: safeDecode(url.hash.slice(1)) || 'Trojan Node',
             type: 'trojan',
             server: url.hostname,
             port: parseInt(url.port) || 443,
-            password: decodeURIComponent(url.username),
+            password: safeDecode(url.username),
             sni: params.get('sni') || url.hostname,
             'skip-cert-verify': true
         };
@@ -226,11 +232,11 @@ function parseHysteria(link) {
         const url = new URL(link);
         const params = url.searchParams;
         const proxy = {
-            name: decodeURIComponent(url.hash.slice(1)) || 'Hysteria Node',
+            name: safeDecode(url.hash.slice(1)) || 'Hysteria Node',
             type: 'hysteria',
             server: url.hostname,
             port: parseInt(url.port) || 443,
-            'auth-str': params.get('auth') || decodeURIComponent(url.username) || '',
+            'auth-str': params.get('auth') || safeDecode(url.username) || '',
             up: params.get('upmbps') || '100',
             down: params.get('downmbps') || '100',
             sni: params.get('peer') || params.get('sni') || url.hostname,
@@ -254,11 +260,11 @@ function parseHysteria2(link) {
         const url = new URL(normalized);
         const params = url.searchParams;
         const proxy = {
-            name: decodeURIComponent(url.hash.slice(1)) || 'Hysteria2 Node',
+            name: safeDecode(url.hash.slice(1)) || 'Hysteria2 Node',
             type: 'hysteria2',
             server: url.hostname,
             port: parseInt(url.port) || 443,
-            password: decodeURIComponent(url.username),
+            password: safeDecode(url.username),
             sni: params.get('sni') || url.hostname,
             'skip-cert-verify': params.get('insecure') === '1'
         };
@@ -278,12 +284,12 @@ function parseTuic(link) {
         const url = new URL(link);
         const params = url.searchParams;
         const proxy = {
-            name: decodeURIComponent(url.hash.slice(1)) || 'TUIC Node',
+            name: safeDecode(url.hash.slice(1)) || 'TUIC Node',
             type: 'tuic',
             server: url.hostname,
             port: parseInt(url.port) || 443,
             uuid: url.username,
-            password: decodeURIComponent(url.password || ''),
+            password: safeDecode(url.password || ''),
             sni: params.get('sni') || url.hostname,
             'skip-cert-verify': params.get('allow_insecure') === '1' || params.get('insecure') === '1',
             'congestion-controller': params.get('congestion_control') || 'bbr',
@@ -305,12 +311,12 @@ function parseWireGuard(link) {
         const url = new URL(normalized);
         const params = url.searchParams;
         const proxy = {
-            name: decodeURIComponent(url.hash.slice(1)) || 'WireGuard Node',
+            name: safeDecode(url.hash.slice(1)) || 'WireGuard Node',
             type: 'wireguard',
             server: url.hostname,
             port: parseInt(url.port) || 51820,
             'private-key': params.get('privatekey') || params.get('prikey') || '',
-            'public-key': params.get('publickey') || params.get('pubkey') || decodeURIComponent(url.username) || '',
+            'public-key': params.get('publickey') || params.get('pubkey') || safeDecode(url.username) || '',
             ip: params.get('address') || '10.0.0.2',
             mtu: parseInt(params.get('mtu') || '1420')
         };
@@ -329,14 +335,14 @@ function parseSocks5(link) {
     try {
         const url = new URL(link);
         const proxy = {
-            name: decodeURIComponent(url.hash.slice(1)) || 'SOCKS5 Node',
+            name: safeDecode(url.hash.slice(1)) || 'SOCKS5 Node',
             type: 'socks5',
             server: url.hostname,
             port: parseInt(url.port) || 1080
         };
         if (url.username || url.password) {
-            proxy.username = decodeURIComponent(url.username);
-            proxy.password = decodeURIComponent(url.password);
+            proxy.username = safeDecode(url.username);
+            proxy.password = safeDecode(url.password);
         }
         return proxy;
     } catch (e) {
@@ -352,11 +358,11 @@ function parseSnell(link) {
         const url = new URL(link);
         const params = url.searchParams;
         const proxy = {
-            name: decodeURIComponent(url.hash.slice(1)) || 'Snell Node',
+            name: safeDecode(url.hash.slice(1)) || 'Snell Node',
             type: 'snell',
             server: url.hostname,
             port: parseInt(url.port) || 443,
-            psk: decodeURIComponent(url.username) || params.get('psk') || '',
+            psk: safeDecode(url.username) || params.get('psk') || '',
             version: params.get('version') || '4'
         };
         if (params.get('obfs')) {
@@ -380,12 +386,12 @@ function parseNaive(link) {
         const normalized = link.replace('naive+https://', 'https://');
         const url = new URL(normalized);
         const proxy = {
-            name: decodeURIComponent(url.hash.slice(1)) || 'NaiveProxy Node',
+            name: safeDecode(url.hash.slice(1)) || 'NaiveProxy Node',
             type: 'naive',
             server: url.hostname,
             port: parseInt(url.port) || 443,
-            username: decodeURIComponent(url.username) || '',
-            password: decodeURIComponent(url.password) || ''
+            username: safeDecode(url.username) || '',
+            password: safeDecode(url.password) || ''
         };
         return proxy;
     } catch (e) {
@@ -400,14 +406,14 @@ function parseAnyTLS(link) {
     try {
         const url = new URL(link);
         const proxy = {
-            name: decodeURIComponent(url.hash.slice(1)) || 'AnyTLS Node',
+            name: safeDecode(url.hash.slice(1)) || 'AnyTLS Node',
             type: 'anytls',
             server: url.hostname,
             port: parseInt(url.port) || 443
         };
         if (url.username || url.password) {
-            proxy.username = decodeURIComponent(url.username);
-            proxy.password = decodeURIComponent(url.password);
+            proxy.username = safeDecode(url.username);
+            proxy.password = safeDecode(url.password);
         }
         return proxy;
     } catch (e) {

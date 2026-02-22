@@ -37,13 +37,23 @@ app.use('/api', apiRouter);
 // Sub route
 app.use('/sub', subRouter);
 
-// Serve static frontend files (now serving Vue 3 dist)
-app.use(express.static(path.join(ROOT_DIR, 'frontend', 'dist')));
+// Root route: simulate nginx welcome page
+app.get('/', (req, res) => {
+    res.type('text').send('Welcome to nginx!');
+});
+
+// /xinghe route: return the proxy-converter UI
+app.get('/xinghe', (req, res) => {
+    res.sendFile(path.join(ROOT_DIR, 'public', 'index.html'));
+});
+
+// Serve static frontend files from public without default index
+app.use(express.static(path.join(ROOT_DIR, 'public'), { index: false }));
 
 // SPA fallback for frontend caching/routing if needed
 app.use((req, res, next) => {
-    if (req.method === 'GET') {
-        res.sendFile(path.join(ROOT_DIR, 'frontend', 'dist', 'index.html'), err => {
+    if (req.method === 'GET' && !req.path.startsWith('/api') && !req.path.startsWith('/sub')) {
+        res.sendFile(path.join(ROOT_DIR, 'public', 'index.html'), err => {
             if (err) next();
         });
     } else {

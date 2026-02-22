@@ -69,7 +69,6 @@ function convert() {
             filteredProxies = [...allProxies];
 
             renderAll();
-            document.getElementById('resultsSection').classList.remove('hidden');
             document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
             showToast(`✅ 成功解析 ${allProxies.length} 个节点` + (failCount ? `，${failCount} 个失败` : ''), 'success');
         } catch (e) {
@@ -337,12 +336,12 @@ async function pasteFromClipboard() {
 
 function clearAll() {
     document.getElementById('inputArea').value = '';
-    document.getElementById('resultsSection').classList.add('hidden');
     document.getElementById('searchInput').value = '';
     allProxies = [];
     filteredProxies = [];
     activeFilters.clear();
     currentOutput = '';
+    renderAll();
     showToast('🗑️ 已清空', 'info');
 }
 
@@ -425,6 +424,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.format-tab').forEach(tab => {
         tab.addEventListener('click', () => switchFormat(tab.dataset.format));
     });
+    
+    // 初始化无节点的默认展示UI
+    renderAll();
+    // 加载订阅节点列表
+    loadNodeList();
+
     // 检测订阅服务状态
     checkServerStatus();
 });
@@ -503,7 +508,6 @@ function loadSavedNodes() {
                 activeFilters.clear();
                 filteredProxies = [...allProxies];
                 renderAll();
-                document.getElementById('resultsSection').classList.remove('hidden');
             }
         })
         .catch(e => console.error('获取保存节点失败:', e));
