@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/bin/sh
 # 一键部署与更新 proxy-converter
 
 # 获取脚本所在目录的绝对路径
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+DIR="$( cd "$( dirname "$0" )" && pwd )"
 cd "$DIR" || exit
 
 echo "⏬ 拉取最新代码..."
