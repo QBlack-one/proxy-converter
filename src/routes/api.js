@@ -187,6 +187,36 @@ router.delete('/nodes', requireAuth, (req, res) => {
     }
 });
 
+// POST /api/nodes/batch-delete
+router.post('/nodes/batch-delete', requireAuth, (req, res) => {
+    try {
+        const { indices } = req.body;
+        if (!Array.isArray(indices) || indices.length === 0) {
+            return res.status(400).json({ error: '请提供要删除的节点索引数组' });
+        }
+
+        const nodes = getNodes();
+        const deleteStmt = db.prepare('DELETE FROM nodes WHERE id = ?');
+        let removedCount = 0;
+
+        db.transaction(() => {
+            // Sort in descending order to avoid index shifting if we were splicing, 
+            // but we are using DB IDs so order doesn't technically matter for DELETE
+            for (const idx of indices) {
+                if (idx >= 0 && idx < nodes.length) {
+                    deleteStmt.run(nodes[idx].id);
+                    removedCount++;
+                }
+            }
+        })();
+
+        setSetting('meta_updated_at', new Date().toISOString());
+        res.json({ success: true, removedCount, remaining: nodes.length - removedCount });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // DELETE /api/links (Clear all)
 router.delete('/links', requireAuth, (req, res) => {
     try {
