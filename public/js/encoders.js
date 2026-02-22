@@ -148,6 +148,50 @@ function encodeWireGuard(p) {
     return `wireguard://${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
 }
 
+// ==================== SOCKS5 ====================
+
+function encodeSocks5(p) {
+    const params = new URLSearchParams();
+    let auth = '';
+    if (p.username || p.password) {
+        auth = `${encodeURIComponent(p.username || '')}:${encodeURIComponent(p.password || '')}@`;
+    }
+    return `socks5://${auth}${p.server}:${p.port}#${encodeURIComponent(p.name || '')}`;
+}
+
+// ==================== Snell ====================
+
+function encodeSnell(p) {
+    const params = new URLSearchParams();
+    if (p.psk) params.set('psk', p.psk);
+    if (p.version) params.set('version', p.version);
+    if (p.obfs) {
+        params.set('obfs', p.obfs);
+        if (p['obfs-host']) params.set('obfs-host', p['obfs-host']);
+    }
+    return `snell://${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+}
+
+// ==================== NaiveProxy ====================
+
+function encodeNaive(p) {
+    let auth = '';
+    if (p.username || p.password) {
+        auth = `${encodeURIComponent(p.username || '')}:${encodeURIComponent(p.password || '')}@`;
+    }
+    return `naive+https://${auth}${p.server}:${p.port}#${encodeURIComponent(p.name || '')}`;
+}
+
+// ==================== AnyTLS ====================
+
+function encodeAnyTLS(p) {
+    let auth = '';
+    if (p.username || p.password) {
+        auth = `${encodeURIComponent(p.username || '')}:${encodeURIComponent(p.password || '')}@`;
+    }
+    return `anytls://${auth}${p.server}:${p.port}#${encodeURIComponent(p.name || '')}`;
+}
+
 // ==================== 统一编码入口 ====================
 
 function encodeProxy(p) {
@@ -161,6 +205,10 @@ function encodeProxy(p) {
         case 'hysteria2': return encodeHysteria2(p);
         case 'tuic': return encodeTuic(p);
         case 'wireguard': return encodeWireGuard(p);
+        case 'socks5': return encodeSocks5(p);
+        case 'snell': return encodeSnell(p);
+        case 'naive': return encodeNaive(p);
+        case 'anytls': return encodeAnyTLS(p);
         default: return null;
     }
 }

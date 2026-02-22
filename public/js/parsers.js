@@ -1,6 +1,6 @@
 /**
  * 代理订阅转换器 - 协议解析模块
- * 支持: VMess, VLESS, SS, SSR, Trojan, Hysteria, Hysteria2, TUIC, WireGuard
+ * 支持: VMess, VLESS, SS, SSR, Trojan, Hysteria, Hysteria2, TUIC, WireGuard, SOCKS5, Snell, NaiveProxy, AnyTLS
  */
 
 // ==================== Base64 工具 ====================
@@ -323,6 +323,99 @@ function parseWireGuard(link) {
     }
 }
 
+// ==================== SOCKS5 ====================
+
+function parseSocks5(link) {
+    try {
+        const url = new URL(link);
+        const proxy = {
+            name: decodeURIComponent(url.hash.slice(1)) || 'SOCKS5 Node',
+            type: 'socks5',
+            server: url.hostname,
+            port: parseInt(url.port) || 1080
+        };
+        if (url.username || url.password) {
+            proxy.username = decodeURIComponent(url.username);
+            proxy.password = decodeURIComponent(url.password);
+        }
+        return proxy;
+    } catch (e) {
+        console.warn('SOCKS5 解析失败:', e);
+        return null;
+    }
+}
+
+// ==================== Snell ====================
+
+function parseSnell(link) {
+    try {
+        const url = new URL(link);
+        const params = url.searchParams;
+        const proxy = {
+            name: decodeURIComponent(url.hash.slice(1)) || 'Snell Node',
+            type: 'snell',
+            server: url.hostname,
+            port: parseInt(url.port) || 443,
+            psk: decodeURIComponent(url.username) || params.get('psk') || '',
+            version: params.get('version') || '4'
+        };
+        if (params.get('obfs')) {
+            proxy.obfs = params.get('obfs');
+            if (params.get('obfs-host')) {
+                proxy['obfs-host'] = params.get('obfs-host');
+            }
+        }
+        return proxy;
+    } catch (e) {
+        console.warn('Snell 解析失败:', e);
+        return null;
+    }
+}
+
+// ==================== NaiveProxy ====================
+
+function parseNaive(link) {
+    try {
+        // naive+https://user:pass@example.com:443#Name
+        const normalized = link.replace('naive+https://', 'https://');
+        const url = new URL(normalized);
+        const proxy = {
+            name: decodeURIComponent(url.hash.slice(1)) || 'NaiveProxy Node',
+            type: 'naive',
+            server: url.hostname,
+            port: parseInt(url.port) || 443,
+            username: decodeURIComponent(url.username) || '',
+            password: decodeURIComponent(url.password) || ''
+        };
+        return proxy;
+    } catch (e) {
+        console.warn('NaiveProxy 解析失败:', e);
+        return null;
+    }
+}
+
+// ==================== AnyTLS ====================
+
+function parseAnyTLS(link) {
+    try {
+        const url = new URL(link);
+        const proxy = {
+            name: decodeURIComponent(url.hash.slice(1)) || 'AnyTLS Node',
+            type: 'anytls',
+            server: url.hostname,
+            port: parseInt(url.port) || 443
+        };
+        if (url.username || url.password) {
+            proxy.username = decodeURIComponent(url.username);
+            proxy.password = decodeURIComponent(url.password);
+        }
+        return proxy;
+    } catch (e) {
+        console.warn('AnyTLS 解析失败:', e);
+        return null;
+    }
+}
+
 // ==================== 入口路由 ====================
 
 function parseLink(link) {
@@ -337,6 +430,10 @@ function parseLink(link) {
     if (link.startsWith('hysteria://')) return parseHysteria(link);
     if (link.startsWith('tuic://')) return parseTuic(link);
     if (link.startsWith('wireguard://') || link.startsWith('wg://')) return parseWireGuard(link);
+    if (link.startsWith('socks5://')) return parseSocks5(link);
+    if (link.startsWith('snell://')) return parseSnell(link);
+    if (link.startsWith('naive+https://')) return parseNaive(link);
+    if (link.startsWith('anytls://')) return parseAnyTLS(link);
     return null;
 }
 

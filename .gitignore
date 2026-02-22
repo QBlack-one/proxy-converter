@@ -4,9 +4,10 @@ node_modules/
 package-lock.json
 
 # 数据文件
-data/links.txt
-data/meta.json
-data/history.json
+data/
+*.db
+*.sqlite
+*.sqlite3
 
 # 配置文件（包含敏感信息）
 config.json

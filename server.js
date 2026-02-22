@@ -1,58 +1,57 @@
-/**
- * 代理订阅转换器 - 入口文件
- *
- * 启动: node server.js
- */
-
 'use strict';
 
-const http = require('http');
-const url = require('url');
-const fs = require('fs');
+const express = require('express');
+const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
+const pino = require('pino');
+const pinoHttp = require('pino-http');
 
 const { config, PORT, ROOT_DIR } = require('./src/config');
-const { setupMiddleware, time } = require('./src/middleware');
-const { handleSub } = require('./src/routes/sub');
-const { handleApi } = require('./src/routes/api');
-const { handleStatic } = require('./src/routes/static');
-const { loadMeta } = require('./src/data');
+const apiRouter = require('./src/routes/api');
+const subRouter = require('./src/routes/sub');
 const { startAutoUpdate, stopAutoUpdate } = require('./src/auto-update');
 
-// ==================== HTTP 服务 ====================
-
-const server = http.createServer(async (req, res) => {
-    const startTime = Date.now();
-    const parsedUrl = url.parse(req.url, true);
-    const pathname = parsedUrl.pathname;
-
-    // 请求日志（仅 API 和订阅）
-    res.on('finish', () => {
-        if (!pathname.startsWith('/api') && pathname !== '/sub') return;
-        const ms = Date.now() - startTime;
-        console.log(`[${time()}] ${req.method} ${pathname} → ${res.statusCode} (${ms}ms)`);
-    });
-
-    // CORS
-    setupMiddleware(req, res, pathname);
-
-    if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
-
-    // 路由分发
-    if (pathname === '/sub' && req.method === 'GET') {
-        return handleSub(req, res, parsedUrl);
+// Initialize Pino Logger
+const logger = pino({
+    transport: {
+        target: 'pino-pretty',
+        options: { colorize: true, translateTime: 'SYS:yyyy-mm-dd HH:MM:ss' }
     }
-
-    if (pathname.startsWith('/api')) {
-        const handled = await handleApi(req, res, pathname, parsedUrl);
-        if (handled) return;
-    }
-
-    // 静态文件
-    return handleStatic(req, res, pathname);
 });
 
-// ==================== 配置热重载 ====================
+const app = express();
+
+// ==================== Middleware ====================
+
+app.use(pinoHttp({ logger }));
+app.use(cors({ origin: '*' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ==================== Routes ====================
+
+// API routes
+app.use('/api', apiRouter);
+
+// Sub route
+app.use('/sub', subRouter);
+
+// Serve static frontend files (now serving Vue 3 dist)
+app.use(express.static(path.join(ROOT_DIR, 'frontend', 'dist')));
+
+// SPA fallback for frontend caching/routing if needed
+app.use((req, res, next) => {
+    if (req.method === 'GET') {
+        res.sendFile(path.join(ROOT_DIR, 'frontend', 'dist', 'index.html'), err => {
+            if (err) next();
+        });
+    } else {
+        next();
+    }
+});
+
+// ==================== Config Watch ====================
 
 let configWatchDebounce = null;
 const configFilePath = path.join(ROOT_DIR, 'config.json');
@@ -71,45 +70,37 @@ try {
                     if (!wasEnabled && config.autoUpdate.enabled) startAutoUpdate();
                     if (wasEnabled && !config.autoUpdate.enabled) stopAutoUpdate();
                 }
-                console.log(`[${time()}] ♻️ 配置已热重载`);
+                logger.info('♻️ 配置已热重载');
             } catch (e) {
-                console.error(`[${time()}] 配置重载失败: ${e.message}`);
+                logger.error(`配置重载失败: ${e.message}`);
             }
         }, 500);
     });
 } catch (e) { /* watch 不可用时忽略 */ }
 
-// ==================== 启动 ====================
+// ==================== Start Server ====================
 
-server.listen(PORT, '0.0.0.0', async () => {
-    console.log('');
-    console.log('  ⚡ 代理订阅转换服务已启动');
-    console.log('');
-    console.log(`  📺 网页面板:  http://localhost:${PORT}`);
-    console.log(`  🔗 订阅链接:  http://localhost:${PORT}/sub?format=<格式>`);
-    console.log('');
-    console.log('  支持格式: base64 (默认) | clash-yaml | clash-meta | surge | sing-box | raw');
-    console.log('');
+const server = app.listen(PORT, '0.0.0.0', () => {
+    logger.info('');
+    logger.info('⚡ 代理订阅转换服务已启动 (Express Edition)');
+    logger.info('');
+    logger.info(`📺 网页面板:  http://localhost:${PORT}`);
+    logger.info(`🔗 订阅链接:  http://localhost:${PORT}/sub?format=<格式>`);
+    logger.info('');
+    logger.info('支持格式: base64 (默认) | clash-yaml | clash-meta | surge | sing-box | raw');
+    logger.info('');
 
-    try {
-        const meta = await loadMeta();
-        if (meta) {
-            console.log(`  📦 已有保存的节点 (更新于 ${meta.updatedAt})`);
-            console.log('');
-        }
-    } catch (e) { /* ignore */ }
-
-    if (config.autoUpdate.enabled) {
-        console.log(`  🔄 自动更新: 已启用 (间隔 ${config.autoUpdate.interval} 秒)`);
-        console.log(`  📡 订阅源: ${config.autoUpdate.sources.length} 个`);
-        console.log('');
+    if (config.autoUpdate && config.autoUpdate.enabled) {
+        logger.info(`🔄 自动更新: 已启用 (间隔 ${config.autoUpdate.interval} 秒)`);
+        logger.info(`📡 订阅源: ${config.autoUpdate.sources.length} 个`);
+        logger.info('');
         startAutoUpdate();
     }
 
-    console.log('  按 Ctrl+C 停止服务');
-    console.log('');
+    logger.info('按 Ctrl+C 停止服务');
+    logger.info('');
 });
 
-// 优雅关闭
-process.on('SIGINT', () => { console.log('\n正在关闭服务...'); stopAutoUpdate(); process.exit(0); });
-process.on('SIGTERM', () => { console.log('\n正在关闭服务...'); stopAutoUpdate(); process.exit(0); });
+// Graceful shutdown
+process.on('SIGINT', () => { logger.info('正在关闭服务...'); stopAutoUpdate(); process.exit(0); });
+process.on('SIGTERM', () => { logger.info('正在关闭服务...'); stopAutoUpdate(); process.exit(0); });

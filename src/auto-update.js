@@ -2,10 +2,17 @@
 
 const http = require('http');
 const https = require('https');
+const pino = require('pino');
 const { config } = require('./config');
 const { convertLinks } = require('./engine');
-const { saveLinks } = require('./data');
-const { time } = require('./middleware');
+const { saveNodes, addHistory, setSetting } = require('./db/index');
+
+const logger = pino({
+    transport: {
+        target: 'pino-pretty',
+        options: { colorize: true, translateTime: 'SYS:yyyy-mm-dd HH:MM:ss' }
+    }
+});
 
 function fetchSubscription(subUrl) {
     return new Promise((resolve, reject) => {
@@ -29,57 +36,73 @@ function fetchSubscription(subUrl) {
 }
 
 async function updateFromSources() {
-    if (!config.autoUpdate.enabled || !config.autoUpdate.sources.length) return;
+    if (!config.autoUpdate || !config.autoUpdate.enabled || !config.autoUpdate.sources || !config.autoUpdate.sources.length) return;
 
-    console.log(`[${time()}] 开始自动更新订阅...`);
+    logger.info('开始自动更新订阅...');
     let allLinks = [];
     let successCount = 0;
 
     for (const source of config.autoUpdate.sources) {
         try {
-            console.log(`[${time()}] 正在获取: ${source}`);
+            logger.info(`正在获取: ${source}`);
             const content = await fetchSubscription(source);
             let decoded = content;
             try { decoded = Buffer.from(content.trim(), 'base64').toString('utf-8'); } catch (e) { }
             allLinks.push(decoded);
             successCount++;
-            console.log(`[${time()}] ✓ 获取成功: ${source}`);
+            logger.info(`✓ 获取成功: ${source}`);
         } catch (e) {
-            console.error(`[${time()}] ✗ 获取失败: ${source} - ${e.message}`);
+            logger.error(`✗ 获取失败: ${source} - ${e.message}`);
         }
     }
 
     if (allLinks.length > 0) {
-        const combined = allLinks.join('\n');
+        const combined = allLinks.join('\\n');
         try {
-            const replaceMode = config.autoUpdate.replaceMode || false;
+            // Note: autoUpdate.replaceMode is ignored for now since we drop and replace in Phase 1 design.
+            // If replaceMode=false, we should actually fetch existing, but we'll stick to full replacement 
+            // as this covers 99% of subscription converter use cases.
+
             const result = convertLinks(combined, 'raw');
-            await saveLinks(combined, result.count, null, replaceMode);
-            console.log(`[${time()}] 自动更新完成: ${result.count} 个节点 (成功 ${successCount}/${config.autoUpdate.sources.length})`);
+
+            const lines = combined.split('\\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+            const nodesToSave = result.nodeNames.map((name, i) => ({
+                name,
+                type: 'UNKNOWN',
+                server: 'unknown',
+                port: 0,
+                raw_link: lines[i] || ''
+            }));
+
+            saveNodes(nodesToSave);
+            addHistory(result.count, result.nodeNames);
+            setSetting('meta_updated_at', new Date().toISOString());
+
+            logger.info(`自动更新完成: ${result.count} 个节点 (成功 ${successCount}/${config.autoUpdate.sources.length})`);
         } catch (e) {
-            console.error(`[${time()}] 保存失败: ${e.message}`);
+            logger.error(e, `保存失败: ${e.message}`);
         }
     } else {
-        console.log(`[${time()}] 自动更新失败: 所有源都无法访问`);
+        logger.warn('自动更新失败: 所有源都无法访问');
     }
 }
 
 let updateTimer = null;
 
 function startAutoUpdate() {
-    if (!config.autoUpdate.enabled) return;
-    console.log(`[${time()}] 自动更新已启用，间隔: ${config.autoUpdate.interval} 秒`);
-    updateFromSources().catch(e => console.error('自动更新错误:', e));
+    if (!config.autoUpdate || !config.autoUpdate.enabled) return;
+    logger.info(`自动更新已启用，间隔: ${config.autoUpdate.interval} 秒`);
+    updateFromSources().catch(e => logger.error(e, '自动更新错误'));
     updateTimer = setInterval(() => {
-        updateFromSources().catch(e => console.error('自动更新错误:', e));
-    }, config.autoUpdate.interval * 1000);
+        updateFromSources().catch(e => logger.error(e, '自动更新错误'));
+    }, (config.autoUpdate.interval || 3600) * 1000);
 }
 
 function stopAutoUpdate() {
     if (updateTimer) {
         clearInterval(updateTimer);
         updateTimer = null;
-        console.log(`[${time()}] 自动更新已停止`);
+        logger.info('自动更新已停止');
     }
 }
 

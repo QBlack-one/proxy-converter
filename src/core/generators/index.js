@@ -1,9 +1,37 @@
-/**
- * 代理订阅转换器 - 多格式配置生成器
- * 支持: Clash, Clash Meta, Surge, Sing-Box, Base64 订阅, 原始链接
- */
+const { flowObj } = require('../utils/yaml');
+const { encodeProxy } = require('../protocols/index');
+const { b64Encode } = require('../utils/base64');
 
-// ==================== Clash Meta (Mihomo) ====================
+// ==================== Clash / Clash Meta Helpers ====================
+
+function getClashRules(proxyGroup) {
+    const P = proxyGroup;
+    return [
+        'GEOSITE,private,DIRECT',
+        'GEOIP,LAN,DIRECT,no-resolve',
+        'GEOSITE,cn,DIRECT',
+        'GEOIP,CN,DIRECT,no-resolve',
+        `IP-CIDR,1.1.1.1/32,${P},no-resolve`,
+        `IP-CIDR,8.8.8.8/32,${P},no-resolve`,
+        `DOMAIN-SUFFIX,services.googleapis.cn,${P}`,
+        `DOMAIN-SUFFIX,xn--ngstr-lra8j.com,${P}`,
+        'DOMAIN,safebrowsing.urlsec.qq.com,DIRECT',
+        'DOMAIN,safebrowsing.googleapis.com,DIRECT',
+        `DOMAIN,developer.apple.com,${P}`,
+        'DOMAIN-SUFFIX,apple.com,DIRECT',
+        'DOMAIN-SUFFIX,icloud.com,DIRECT',
+        'DOMAIN-KEYWORD,google,' + P,
+        'DOMAIN-KEYWORD,youtube,' + P,
+        'DOMAIN-KEYWORD,github,' + P,
+        'DOMAIN-KEYWORD,twitter,' + P,
+        'DOMAIN-KEYWORD,telegram,' + P,
+        'IP-CIDR,91.108.4.0/22,' + P + ',no-resolve',
+        'DOMAIN-SUFFIX,cn,DIRECT',
+        'DOMAIN-KEYWORD,-cn,DIRECT',
+        'GEOIP,CN,DIRECT',
+        'MATCH,' + P
+    ];
+}
 
 function generateClashMetaConfig(proxies, options = {}) {
     const {
@@ -17,9 +45,8 @@ function generateClashMetaConfig(proxies, options = {}) {
     const lines = [];
 
     // ===== 基础配置 =====
-    const title = 'xinghe';
-    lines.push('name: ' + '"' + title + '"');
-    lines.push('profile-name: ' + '"' + title + '"');
+    lines.push('name: "xinghe"');
+    lines.push('profile-name: "xinghe"');
     lines.push('mixed-port: ' + httpPort);
     lines.push('allow-lan: ' + allowLan);
     lines.push("bind-address: '*'");
@@ -43,8 +70,6 @@ function generateClashMetaConfig(proxies, options = {}) {
         lines.push('    respect-rules: true');
         lines.push("    proxy-server-nameserver: [223.5.5.5, 119.29.29.29, 114.114.114.114]");
         lines.push("    nameserver: [223.5.5.5, 119.29.29.29, 114.114.114.114]");
-        lines.push("    fallback: [1.1.1.1, 8.8.8.8]");
-        lines.push("    fallback-filter: { geoip: true, geoip-code: CN, geosite: [gfw], ipcidr: [240.0.0.0/4], domain: [+.google.com, +.facebook.com, +.youtube.com] }");
     }
 
     // ===== Proxies (flow-style) =====
@@ -54,7 +79,7 @@ function generateClashMetaConfig(proxies, options = {}) {
     }
 
     // ===== Proxy Groups (flow-style) =====
-    const autoGroup = { name: '自动选择', type: 'url-test', proxies: proxyNames, url: testUrl, interval: 86400 };
+    const autoGroup = { name: '自动选择', type: 'url-test', proxies: proxyNames, url: testUrl, interval: testInterval };
     const fallbackGroup = { name: '故障转移', type: 'fallback', proxies: proxyNames, url: testUrl, interval: 7200 };
     const selectGroup = { name: groupName, type: 'select', proxies: ['自动选择', '故障转移', ...proxyNames] };
 
@@ -73,44 +98,15 @@ function generateClashMetaConfig(proxies, options = {}) {
     return lines.join('\n') + '\n';
 }
 
-// ==================== Surge ====================
-
-function generateSurgeConfig(proxies, options = {}) {
-    let output = '';
-
-    // [General]
-    output += '[General]\n';
-    output += `loglevel = ${options.logLevel || 'notify'}\n`;
-    output += 'skip-proxy = 127.0.0.1, 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 100.64.0.0/10, localhost, *.local\n';
-    output += `internet-test-url = ${options.testUrl || 'http://www.gstatic.com/generate_204'}\n`;
-    output += `proxy-test-url = ${options.testUrl || 'http://www.gstatic.com/generate_204'}\n`;
-    output += `test-timeout = 5\n`;
-    if (options.allowLan) output += `allow-wifi-access = true\n`;
-    output += '\n';
-
-    // [Proxy]
-    output += '[Proxy]\n';
-    output += 'DIRECT = direct\n';
-    for (const p of proxies) {
-        output += surgeProxyLine(p) + '\n';
-    }
-    output += '\n';
-
-    // [Proxy Group]
-    const proxyNames = proxies.map(p => p.name);
-    output += '[Proxy Group]\n';
-    output += `🚀 节点选择 = select, ♻️ 自动选择, DIRECT, ${proxyNames.join(', ')}\n`;
-    output += `♻️ 自动选择 = url-test, ${proxyNames.join(', ')}, url=${options.testUrl || 'http://www.gstatic.com/generate_204'}, interval=${options.testInterval || 300}\n`;
-    output += '\n';
-
-    // [Rule]
-    output += '[Rule]\n';
-    output += 'GEOIP,LAN,DIRECT\n';
-    output += 'GEOIP,CN,DIRECT\n';
-    output += 'FINAL,🚀 节点选择\n';
-
-    return output;
+function generateClashConfig(proxies, options = {}) {
+    // Generate base clash structure reusing ClashMeta structure but without Meta specific features
+    // For simplicity, proxy to clash meta implementation as they share baseline YAML structure
+    const config = generateClashMetaConfig(proxies, options);
+    // Remove meta specific things using regex if strictly needed, or leave compatible
+    return config.replace(/find-process-mode: strict\n/, '').replace(/global-client-fingerprint: chrome\n/, '');
 }
+
+// ==================== Surge ====================
 
 function surgeProxyLine(p) {
     const name = p.name;
@@ -176,68 +172,40 @@ function surgeProxyLine(p) {
     }
 }
 
-// ==================== Sing-Box ====================
+function generateSurgeConfig(proxies, options = {}) {
+    let output = '';
 
-function generateSingBoxConfig(proxies, options = {}) {
-    const outbounds = [];
+    output += '[General]\n';
+    output += `loglevel = ${options.logLevel || 'notify'}\n`;
+    output += 'skip-proxy = 127.0.0.1, 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12, 100.64.0.0/10, localhost, *.local\n';
+    output += `internet-test-url = ${options.testUrl || 'http://www.gstatic.com/generate_204'}\n`;
+    output += `proxy-test-url = ${options.testUrl || 'http://www.gstatic.com/generate_204'}\n`;
+    output += `test-timeout = 5\n`;
+    if (options.allowLan) output += `allow-wifi-access = true\n`;
+    output += '\n';
 
-    // 节点
+    output += '[Proxy]\n';
+    output += 'DIRECT = direct\n';
     for (const p of proxies) {
-        const ob = singboxOutbound(p);
-        if (ob) outbounds.push(ob);
+        output += surgeProxyLine(p) + '\n';
     }
+    output += '\n';
 
-    const tags = outbounds.map(o => o.tag);
+    const proxyNames = proxies.map(p => p.name);
+    output += '[Proxy Group]\n';
+    output += `🚀 节点选择 = select, ♻️ 自动选择, DIRECT, ${proxyNames.join(', ')}\n`;
+    output += `♻️ 自动选择 = url-test, ${proxyNames.join(', ')}, url=${options.testUrl || 'http://www.gstatic.com/generate_204'}, interval=${options.testInterval || 300}\n`;
+    output += '\n';
 
-    // selector
-    outbounds.unshift({
-        type: 'selector',
-        tag: '🚀 节点选择',
-        outbounds: ['♻️ 自动选择', 'direct', ...tags],
-        default: '♻️ 自动选择'
-    });
+    output += '[Rule]\n';
+    output += 'GEOIP,LAN,DIRECT\n';
+    output += 'GEOIP,CN,DIRECT\n';
+    output += 'FINAL,🚀 节点选择\n';
 
-    // urltest
-    outbounds.splice(1, 0, {
-        type: 'urltest',
-        tag: '♻️ 自动选择',
-        outbounds: tags,
-        url: options.testUrl || 'http://www.gstatic.com/generate_204',
-        interval: (options.testInterval || 300) + 's'
-    });
-
-    // direct & block
-    outbounds.push({ type: 'direct', tag: 'direct' });
-    outbounds.push({ type: 'block', tag: 'block' });
-    outbounds.push({ type: 'dns', tag: 'dns-out' });
-
-    const config = {
-        log: { level: options.logLevel || 'info', timestamp: true },
-        dns: {
-            servers: [
-                { tag: 'google', address: 'https://dns.google/dns-query', detour: '🚀 节点选择' },
-                { tag: 'local', address: '223.5.5.5', detour: 'direct' }
-            ],
-            rules: [
-                { geosite: 'cn', server: 'local' }
-            ]
-        },
-        inbounds: [
-            { type: 'mixed', tag: 'mixed-in', listen: '::', listen_port: options.httpPort || 7890 }
-        ],
-        outbounds: outbounds,
-        route: {
-            rules: [
-                { geoip: ['private', 'cn'], outbound: 'direct' },
-                { geosite: ['cn'], outbound: 'direct' }
-            ],
-            final: '🚀 节点选择',
-            auto_detect_interface: true
-        }
-    };
-
-    return JSON.stringify(config, null, 2);
+    return output;
 }
+
+// ==================== Sing-Box ====================
 
 function singboxOutbound(p) {
     const base = { tag: p.name, server: p.server, server_port: p.port };
@@ -334,43 +302,121 @@ function singboxOutbound(p) {
     }
 }
 
-// ==================== 格式注册表 ====================
+function generateSingBoxConfig(proxies, options = {}) {
+    const outbounds = [];
+
+    for (const p of proxies) {
+        const ob = singboxOutbound(p);
+        if (ob) outbounds.push(ob);
+    }
+
+    const tags = outbounds.map(o => o.tag);
+
+    outbounds.unshift({
+        type: 'selector',
+        tag: '🚀 节点选择',
+        outbounds: ['♻️ 自动选择', 'direct', ...tags],
+        default: '♻️ 自动选择'
+    });
+
+    outbounds.splice(1, 0, {
+        type: 'urltest',
+        tag: '♻️ 自动选择',
+        outbounds: tags,
+        url: options.testUrl || 'http://www.gstatic.com/generate_204',
+        interval: (options.testInterval || 300) + 's'
+    });
+
+    outbounds.push({ type: 'direct', tag: 'direct' });
+    outbounds.push({ type: 'block', tag: 'block' });
+    outbounds.push({ type: 'dns', tag: 'dns-out' });
+
+    const config = {
+        log: { level: options.logLevel || 'info', timestamp: true },
+        dns: {
+            servers: [
+                { tag: 'google', address: 'https://dns.google/dns-query', detour: '🚀 节点选择' },
+                { tag: 'local', address: '223.5.5.5', detour: 'direct' }
+            ],
+            rules: [
+                { geosite: 'cn', server: 'local' }
+            ]
+        },
+        inbounds: [
+            { type: 'mixed', tag: 'mixed-in', listen: '::', listen_port: options.httpPort || 7890 }
+        ],
+        outbounds: outbounds,
+        route: {
+            rules: [
+                { geoip: ['private', 'cn'], outbound: 'direct' },
+                { geosite: ['cn'], outbound: 'direct' }
+            ],
+            final: '🚀 节点选择',
+            auto_detect_interface: true
+        }
+    };
+
+    return JSON.stringify(config, null, 2);
+}
+
+// ==================== 原生与订阅链接生成 ====================
+
+function generateRawLinks(proxies) {
+    return proxies.map(p => encodeProxy(p)).filter(Boolean).join('\n');
+}
+
+function generateBase64Sub(proxies) {
+    const raw = generateRawLinks(proxies);
+    return b64Encode(raw);
+}
+
+// ==================== 统一收口 ====================
 
 const OUTPUT_FORMATS = {
     'clash-yaml': {
         name: 'Clash YAML',
         ext: '.yaml',
         mime: 'text/yaml',
-        generate: (proxies, opts) => generateClashConfig(proxies, opts)
+        generate: generateClashConfig
     },
     'clash-meta': {
         name: 'Clash Meta',
         ext: '.yaml',
         mime: 'text/yaml',
-        generate: (proxies, opts) => generateClashMetaConfig(proxies, opts)
+        generate: generateClashMetaConfig
     },
     surge: {
         name: 'Surge',
         ext: '.conf',
         mime: 'text/plain',
-        generate: (proxies, opts) => generateSurgeConfig(proxies, opts)
+        generate: generateSurgeConfig
     },
     'sing-box': {
         name: 'Sing-Box',
         ext: '.json',
         mime: 'application/json',
-        generate: (proxies, opts) => generateSingBoxConfig(proxies, opts)
+        generate: generateSingBoxConfig
     },
     base64: {
         name: 'Base64 订阅',
         ext: '.txt',
         mime: 'text/plain',
-        generate: (proxies) => generateBase64Sub(proxies)
+        generate: generateBase64Sub
     },
     raw: {
         name: '原始链接',
         ext: '.txt',
         mime: 'text/plain',
-        generate: (proxies) => generateRawLinks(proxies)
+        generate: generateRawLinks
     }
+};
+
+module.exports = {
+    OUTPUT_FORMATS,
+    generateClashConfig,
+    generateClashMetaConfig,
+    generateSurgeConfig,
+    generateSingBoxConfig,
+    generateBase64Sub,
+    generateRawLinks
 };

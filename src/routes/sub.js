@@ -1,11 +1,9 @@
-'use strict';
-
-const url = require('url');
-const { config } = require('../config');
+const express = require('express');
+const router = express.Router();
 const { convertLinks } = require('../engine');
-const { loadLinks } = require('../data');
+const { getNodes } = require('../db/index');
 const { detectClientFromUserAgent, generateSubscriptionHeaders } = require('../subscription');
-const { time } = require('../middleware');
+const { config } = require('../config');
 
 const FORMAT_MIME = {
     'base64': 'text/plain; charset=utf-8',
@@ -25,33 +23,30 @@ const FORMAT_FILENAME = {
     'raw': 'links.txt'
 };
 
-async function handleSub(req, res, parsedUrl) {
+router.get('/', (req, res) => {
     try {
-        const rawContent = await loadLinks();
+        const nodes = getNodes();
+        const rawContent = nodes.map(n => n.raw_link).join('\\n');
+
         if (!rawContent.trim()) {
-            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-            res.end('暂无保存的代理链接\n请先在网页面板中粘贴链接并点击「保存到订阅服务」');
-            return;
+            return res.status(404).type('text').send('暂无保存的代理链接\\n请先在网页面板中粘贴链接并点击「保存到订阅服务」');
         }
 
-        // 确定输出格式
-        let format = parsedUrl.query.format || parsedUrl.query.type || '';
+        let format = req.query.format || req.query.type || '';
         if (!format) {
             format = detectClientFromUserAgent(req.headers['user-agent']);
         }
 
         if (!FORMAT_MIME[format]) {
-            res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-            res.end('不支持的格式: ' + format + '\n支持: clash-yaml, clash-meta, surge, sing-box, base64, raw');
-            return;
+            return res.status(400).type('text').send('不支持的格式: ' + format + '\\n支持: clash-yaml, clash-meta, surge, sing-box, base64, raw');
         }
 
         const options = {
             title: 'xinghe',
-            httpPort: parseInt(parsedUrl.query.port) || config.defaults.httpPort,
-            socksPort: parseInt(parsedUrl.query.socks) || config.defaults.socksPort,
-            allowLan: parsedUrl.query.lan !== 'false',
-            mode: parsedUrl.query.mode || config.defaults.mode,
+            httpPort: parseInt(req.query.port) || config.defaults.httpPort,
+            socksPort: parseInt(req.query.socks) || config.defaults.socksPort,
+            allowLan: req.query.lan !== 'false',
+            mode: req.query.mode || config.defaults.mode,
             logLevel: config.defaults.logLevel,
             enableDns: true,
             testUrl: 'http://www.gstatic.com/generate_204',
@@ -60,28 +55,26 @@ async function handleSub(req, res, parsedUrl) {
 
         const result = convertLinks(rawContent, format, options);
 
-        // 设置订阅响应头
         const subHeaders = generateSubscriptionHeaders();
         const ext = FORMAT_FILENAME[format].substring(FORMAT_FILENAME[format].lastIndexOf('.'));
         const baseFilename = `xinghe${ext}`;
         const encodedFilename = encodeURIComponent(baseFilename);
 
-        const asciiFilename = `xinghe${ext}`;
+        res.set(FORMAT_MIME[format]);
+        res.set('Content-Disposition', `inline; filename=${baseFilename}; filename*=utf-8''${encodedFilename}`);
+        res.set('profile-update-interval', String(config.subscription.updateInterval || 24));
+        res.set('profile-title', Buffer.from('xinghe', 'utf-8').toString('base64'));
+        for (const [k, v] of Object.entries(subHeaders)) {
+            res.set(k, v);
+        }
+        res.set('X-Proxy-Count', String(result.count));
 
-        res.writeHead(200, {
-            'Content-Type': FORMAT_MIME[format],
-            'Content-Disposition': `inline; filename=${asciiFilename}; filename*=utf-8''${encodedFilename}`,
-            'profile-update-interval': String(config.subscription.updateInterval || 24),
-            'profile-title': Buffer.from('xinghe', 'utf-8').toString('base64'),
-            ...subHeaders,
-            'X-Proxy-Count': String(result.count)
-        });
-        res.end(result.output);
-        console.log(`[${time()}] GET /sub → ${format} | ${result.count} 个节点`);
+        res.send(result.output);
+        req.log.info({ format, nodes: result.count }, 'Subscription Sent');
     } catch (e) {
-        res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('转换失败: ' + e.message);
+        req.log.error(e, 'Sub Route Error');
+        res.status(500).type('text').send('转换失败: ' + e.message);
     }
-}
+});
 
-module.exports = { handleSub };
+module.exports = router;
