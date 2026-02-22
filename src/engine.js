@@ -23,7 +23,8 @@ function convertLinks(input, formatKey = 'base64', options = {}) {
   return {
     output,
     count: proxies.length,
-    nodeNames: validNames
+    nodeNames: validNames,
+    proxies
   };
 }
 

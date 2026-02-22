@@ -36,9 +36,16 @@ db.exec(`
     );
 `);
 
+// Migration: Add details column if not exists
+try {
+    db.exec('ALTER TABLE nodes ADD COLUMN details TEXT DEFAULT "{}"');
+} catch (e) {
+    // Column already exists, ignore
+}
+
 // ==================== Nodes Service ====================
 
-const insertNodeStmt = db.prepare('INSERT INTO nodes (name, type, server, port, raw_link) VALUES (@name, @type, @server, @port, @raw_link)');
+const insertNodeStmt = db.prepare('INSERT INTO nodes (name, type, server, port, raw_link, details) VALUES (@name, @type, @server, @port, @raw_link, @details)');
 const getAllNodesStmt = db.prepare('SELECT * FROM nodes ORDER BY created_at ASC');
 const deleteAllNodesStmt = db.prepare('DELETE FROM nodes');
 
@@ -59,7 +66,8 @@ function saveNodes(nodesArray) {
                 type: node.type || 'unknown',
                 server: node.server || 'unknown',
                 port: node.port || 0,
-                raw_link: link
+                raw_link: link,
+                details: node.details || '{}'
             });
             existingNames.add(name);
             if (link) existingLinks.add(link);
