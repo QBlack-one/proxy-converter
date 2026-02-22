@@ -9,19 +9,19 @@
     <!-- 解析结果统计 -->
     <div class="card" v-if="parseResult">
       <div class="card-title">
-        <div class="icon" style="background:rgba(99,102,241,0.15)">⚡</div>
+        <div class="icon icon-filter">⚡</div>
         解析结果
       </div>
-      <div class="parse-stats">
-        <div class="stat-tag stat-total">
-          总计 <b>{{ parseResult.count }}</b>
+      <div class="stats-row">
+        <div class="stat-chip">
+          总计 <span class="count">{{ parseResult.count }}</span>
         </div>
         <div 
           v-for="(count, type) in parseResult.typeStats" 
           :key="type"
-          :class="['stat-tag', 'stat-' + type.toLowerCase()]"
+          class="stat-chip"
         >
-          {{ type }} <b>{{ count }}</b>
+          {{ type }} <span class="count">{{ count }}</span>
         </div>
       </div>
     </div>
@@ -44,12 +44,9 @@
         </button>
       </div>
 
-      <div class="output-preview">
-        <pre v-if="loading">加载中...</pre>
-        <pre v-else>{{ outputText }}</pre>
-      </div>
+      <div class="output-preview">{{ loading ? '加载中...' : outputText }}</div>
 
-      <div class="output-actions">
+      <div class="btn-row" style="justify-content:flex-end">
         <button class="btn btn-primary btn-sm" @click="copyOutput">
           {{ copyStatus || '📋 复制配置' }}
         </button>
@@ -116,15 +113,13 @@ async function fetchConversion() {
   try {
     const data = await saveLinks(recentLinks.value)
     if (data.success) {
-      // 构建解析结果统计
       parseResult.value = {
-        count: data.count || data.newCount || 0,
+        count: data.count || 0,
         newCount: data.newCount || 0,
         duplicateCount: data.duplicateCount || 0,
         typeStats: {}
       }
 
-      // 获取当前节点列表以统计协议类型
       try {
         const nodesRes = await fetch('/api/nodes')
         const nodesData = await nodesRes.json()
@@ -179,60 +174,3 @@ watch(config, () => {
   if (parseResult.value) fetchConversion()
 }, { deep: true })
 </script>
-
-<style scoped>
-pre {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  padding: 1rem;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
-  background: rgba(0,0,0,0.3);
-  border-radius: 8px;
-  color: var(--text-primary);
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-/* 解析结果统计标签 */
-.parse-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.stat-tag {
-  padding: 8px 18px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.stat-tag b {
-  margin-left: 6px;
-  font-size: 16px;
-}
-.stat-total { border-color: rgba(99,102,241,0.4); color: #818cf8; }
-.stat-total b { color: #a5b4fc; }
-.stat-vmess { border-color: rgba(99,102,241,0.3); color: #818cf8; }
-.stat-vless { border-color: rgba(16,185,129,0.3); color: #34d399; }
-.stat-ss { border-color: rgba(245,158,11,0.3); color: #fbbf24; }
-.stat-ssr { border-color: rgba(239,68,68,0.3); color: #f87171; }
-.stat-trojan { border-color: rgba(168,85,247,0.3); color: #c084fc; }
-.stat-hysteria, .stat-hysteria2 { border-color: rgba(236,72,153,0.3); color: #f472b6; }
-.stat-tuic { border-color: rgba(14,165,233,0.3); color: #38bdf8; }
-.stat-wireguard { border-color: rgba(34,197,94,0.3); color: #4ade80; }
-.stat-socks5 { border-color: rgba(251,146,60,0.3); color: #fb923c; }
-.stat-unknown { border-color: rgba(148,163,184,0.3); color: #94a3b8; }
-
-/* 输出操作按钮 */
-.output-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  justify-content: flex-end;
-}
-</style>
