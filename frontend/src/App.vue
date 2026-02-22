@@ -4,74 +4,93 @@
 
     <InputCard @convert="handleConvert" />
 
+    <SubManageCard 
+      :is-visible="showSubManage" 
+      @close="showSubManage = false" 
+      @config-saved="onSubConfigSaved"
+    />
+
     <ConfigCard v-model="config" />
 
-    <!-- 解析结果统计 -->
-    <div class="card" v-if="parseResult">
-      <div class="card-title">
-        <div class="icon icon-filter">⚡</div>
-        解析结果
-      </div>
-      <div class="stats-row">
-        <div class="stat-chip">
-          总计 <span class="count">{{ parseResult.count }}</span>
+    <!-- Results Section -->
+    <div id="resultsSection" v-if="parseResult">
+      <!-- 解析结果统计 -->
+      <div class="card">
+        <div class="card-title">
+          <div class="icon icon-nodes">📊</div>
+          解析结果
         </div>
-        <div 
-          v-for="(count, type) in parseResult.typeStats" 
-          :key="type"
-          class="stat-chip"
-        >
-          {{ type }} <span class="count">{{ count }}</span>
+        <div class="stats-row">
+          <div class="stat-chip">
+            总计 <span class="count">{{ parseResult.count }}</span>
+          </div>
+          <div 
+            v-for="(count, type) in parseResult.typeStats" 
+            :key="type"
+            class="stat-chip"
+          >
+            {{ type }} <span class="count">{{ count }}</span>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- 配置输出 -->
-    <div class="card" v-if="parseResult">
-      <div class="card-title">
-        <div class="icon icon-output">📄</div>
-        配置输出
-      </div>
+      <!-- Node List -->
+      <NodeListCard :nodes="nodes" />
       
-      <div class="format-tabs">
-        <button 
-          v-for="fmt in formats" 
-          :key="fmt.id" 
-          :class="['format-tab', currentFormat === fmt.id ? 'active' : '']"
-          @click="currentFormat = fmt.id"
-        >
-          {{ fmt.name }}
-        </button>
-      </div>
+      <!-- 配置输出 -->
+      <div class="card">
+        <div class="card-title">
+          <div class="icon icon-output">📄</div>
+          配置输出
+        </div>
+        
+        <div class="format-tabs">
+          <button 
+            v-for="fmt in formats" 
+            :key="fmt.id" 
+            :class="['format-tab', currentFormat === fmt.id ? 'active' : '']"
+            @click="currentFormat = fmt.id"
+          >
+            {{ fmt.name }}
+          </button>
+        </div>
 
-      <div class="output-preview">{{ loading ? '加载中...' : outputText }}</div>
+        <div class="output-preview">{{ loading ? '加载中...' : outputText }}</div>
 
-      <div class="btn-row" style="justify-content:flex-end">
-        <button class="btn btn-primary btn-sm" @click="copyOutput">
-          {{ copyStatus || '📋 复制配置' }}
-        </button>
-        <button class="btn btn-secondary btn-sm" @click="downloadOutput">
-          💾 下载文件
-        </button>
+        <div class="btn-row">
+          <button class="btn btn-success" @click="downloadOutput">
+            💾 下载 {{ formats.find(f => f.id === currentFormat)?.name || '配置' }}
+          </button>
+          <button class="btn btn-secondary" @click="copyOutput">
+            {{ copyStatus || '📋 复制配置' }}
+          </button>
+        </div>
       </div>
     </div>
 
-    <SubServiceCard />
+    <!-- 传入 showSubManage 状态和 toggle 方法 -->
+    <SubServiceCard 
+      :external-nodes="nodes" 
+      @toggle-manage="showSubManage = !showSubManage" 
+      @nodes-changed="fetchNodes"
+    />
 
-    <ExportCard />
+    <ExportCard :nodes="nodes" />
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import AppHeader from './components/AppHeader.vue'
 import InputCard from './components/InputCard.vue'
 import ConfigCard from './components/ConfigCard.vue'
+import SubManageCard from './components/SubManageCard.vue'
+import NodeListCard from './components/NodeListCard.vue'
 import SubServiceCard from './components/SubServiceCard.vue'
 import ExportCard from './components/ExportCard.vue'
 import { useApi } from './composables/useApi'
 
-const { saveLinks } = useApi()
+const { saveLinks, getNodes, loading } = useApi()
 
 const config = ref({
   httpPort: 7890,
@@ -85,10 +104,11 @@ const config = ref({
 })
 
 const parseResult = ref(null)
-const loading = ref(false)
+const nodes = ref([])
 const outputText = ref('')
 const currentFormat = ref('clash-yaml')
 const copyStatus = ref('')
+const showSubManage = ref(false)
 
 const formats = [
   { id: 'clash-yaml', name: 'Clash YAML', ext: '.yaml' },
@@ -101,6 +121,21 @@ const formats = [
 
 const recentLinks = ref('')
 
+function onSubConfigSaved() {
+  // optionally refresh SubServiceCard
+}
+
+async function fetchNodes() {
+  try {
+    const data = await getNodes()
+    nodes.value = data.nodes || []
+    return data.nodes || []
+  } catch (e) {
+    console.error('Failed to fetch nodes', e)
+    return []
+  }
+}
+
 async function handleConvert(links) {
   if (!links.trim()) return
   recentLinks.value = links
@@ -109,7 +144,6 @@ async function handleConvert(links) {
 
 async function fetchConversion() {
   if (!recentLinks.value) return
-  loading.value = true
   try {
     const data = await saveLinks(recentLinks.value)
     if (data.success) {
@@ -120,19 +154,14 @@ async function fetchConversion() {
         typeStats: {}
       }
 
-      try {
-        const nodesRes = await fetch('/api/nodes')
-        const nodesData = await nodesRes.json()
-        if (nodesData.nodes) {
-          parseResult.value.count = nodesData.nodes.length
-          const stats = {}
-          for (const n of nodesData.nodes) {
-            const t = (n.type || 'UNKNOWN').toUpperCase()
-            stats[t] = (stats[t] || 0) + 1
-          }
-          parseResult.value.typeStats = stats
-        }
-      } catch (e) {}
+      const nodeList = await fetchNodes()
+      parseResult.value.count = nodeList.length
+      const stats = {}
+      for (const n of nodeList) {
+        const t = (n.type || 'UNKNOWN').toUpperCase()
+        stats[t] = (stats[t] || 0) + 1
+      }
+      parseResult.value.typeStats = stats
 
       const subRes = await fetch(`/sub?format=${currentFormat.value}`)
       const text = await subRes.text()
@@ -141,8 +170,6 @@ async function fetchConversion() {
   } catch (err) {
     console.error(err)
     outputText.value = '转换失败: ' + err.message
-  } finally {
-    loading.value = false
   }
 }
 
@@ -158,11 +185,14 @@ function downloadOutput() {
   if (!outputText.value) return
   const fmt = formats.find(f => f.id === currentFormat.value)
   const ext = fmt ? fmt.ext : '.txt'
-  const blob = new Blob([outputText.value], { type: 'text/plain' })
+  const title = 'xinghe'
+  const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '')
+  
+  const blob = new Blob([outputText.value], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `proxy-config${ext}`
+  a.download = `${title}_${dateStr}${ext}`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -173,4 +203,8 @@ watch(currentFormat, () => {
 watch(config, () => {
   if (parseResult.value) fetchConversion()
 }, { deep: true })
+
+onMounted(() => {
+  fetchNodes()
+})
 </script>
