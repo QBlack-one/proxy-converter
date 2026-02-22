@@ -36,7 +36,7 @@
 
 <script setup>
 function importToClient(client) {
-  const baseUrl = `${window.location.protocol}//${window.location.hostname}:3000/sub`
+  const baseUrl = `${window.location.origin}/sub`
   let url = baseUrl
   
   if (client === 'clash') url += '?format=clash-yaml'
