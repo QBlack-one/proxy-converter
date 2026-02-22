@@ -197,5 +197,73 @@ router.delete('/links', requireAuth, (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+// GET /api/subscription
+router.get('/subscription', requireAuth, (req, res) => {
+    const { config } = require('../config');
+    try {
+        res.json({
+            success: true,
+            subscription: config.subscription || {}
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// POST /api/subscription
+router.post('/subscription', requireAuth, (req, res) => {
+    const { config, loadConfig } = require('../config');
+    const fs = require('fs');
+    const path = require('path');
+    try {
+        config.subscription = req.body;
+
+        // Save to config.json
+        const configPath = path.join(__dirname, '..', '..', 'config.json');
+        let userConfig = {};
+        if (fs.existsSync(configPath)) {
+            userConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        }
+        userConfig.subscription = config.subscription;
+        fs.writeFileSync(configPath, JSON.stringify(userConfig, null, 4));
+
+        loadConfig(); // Reload config
+        res.json({ success: true, message: '订阅配置已保存' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// POST /api/subscription/reset-traffic
+router.post('/subscription/reset-traffic', requireAuth, (req, res) => {
+    const { config, loadConfig } = require('../config');
+    const fs = require('fs');
+    const path = require('path');
+    try {
+        if (!config.subscription.traffic) config.subscription.traffic = {};
+        config.subscription.traffic.upload = 0;
+        config.subscription.traffic.download = 0;
+
+        // Save to config.json
+        const configPath = path.join(__dirname, '..', '..', 'config.json');
+        let userConfig = {};
+        if (fs.existsSync(configPath)) {
+            userConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        }
+        if (!userConfig.subscription) userConfig.subscription = {};
+        if (!userConfig.subscription.traffic) userConfig.subscription.traffic = {};
+
+        userConfig.subscription.traffic.upload = 0;
+        userConfig.subscription.traffic.download = 0;
+
+        fs.writeFileSync(configPath, JSON.stringify(userConfig, null, 4));
+
+        loadConfig(); // Reload config
+        res.json({ success: true, message: '流量已重置' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 
 module.exports = router;
+
