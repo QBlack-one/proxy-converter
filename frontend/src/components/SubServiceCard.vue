@@ -121,12 +121,12 @@
     </div>
 
     <!-- 订阅 URL 列表 -->
-    <div v-if="subUrls" class="sub-url-list" style="margin-bottom:16px">
+    <div class="sub-url-list" style="margin-bottom:16px">
       <label style="font-size:12px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;display:block">
         📋 订阅链接（点击复制，添加到客户端）
       </label>
       <div class="sub-url-grid">
-        <div v-for="(url, key) in subUrls" :key="key" class="sub-url-item" @click="copyUrl(url)">
+        <div v-for="(url, key) in generateSubUrls()" :key="key" class="sub-url-item" @click="copyUrl(url)">
           <span class="sub-url-icon">{{ getFormatIcon(key) }}</span>
           <div class="sub-url-info">
             <span class="sub-url-name">{{ getFormatName(key) }}</span>
@@ -193,6 +193,19 @@ const history = ref([])
 
 const hasSubStats = computed(() => subStats.value !== null)
 
+function generateSubUrls() {
+  const baseUrl = `${window.location.origin}/sub`
+  return {
+    universal: baseUrl,
+    base64: `${baseUrl}?format=base64`,
+    'clash-yaml': `${baseUrl}?format=clash-yaml`,
+    'clash-meta': `${baseUrl}?format=clash-meta`,
+    surge: `${baseUrl}?format=surge`,
+    'sing-box': `${baseUrl}?format=sing-box`,
+    raw: `${baseUrl}?format=raw`
+  }
+}
+
 async function refreshInfo() {
   try {
     const data = await getInfo()
@@ -201,22 +214,6 @@ async function refreshInfo() {
       subStats.value = data.subscription
     }
     await loadHistory()
-    
-    // Default subscription URLs if nodes exist
-    if (data.nodeCount && data.nodeCount > 0) {
-      const baseUrl = `${window.location.origin}/sub`
-      subUrls.value = {
-        universal: baseUrl,
-        base64: `${baseUrl}?format=base64`,
-        'clash-yaml': `${baseUrl}?format=clash-yaml`,
-        'clash-meta': `${baseUrl}?format=clash-meta`,
-        surge: `${baseUrl}?format=surge`,
-        'sing-box': `${baseUrl}?format=sing-box`,
-        raw: `${baseUrl}?format=raw`
-      }
-    } else {
-      subUrls.value = null
-    }
   } catch (e) {
     info.value = null
     subStats.value = null
