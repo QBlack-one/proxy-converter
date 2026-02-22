@@ -42,31 +42,36 @@
       </div>
     </div>
 
-    <!-- Node List (默认展示) -->
+    <!-- Node List (卡片展示) -->
     <div style="margin-bottom:16px">
-      <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <span style="font-weight:600;font-size:14px">📋 订阅节点列表 ({{ nodes.length }})</span>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-sm btn-secondary" @click="loadNodes">🔄 刷新</button>
-            <button class="btn btn-sm btn-danger" @click="handleClearNodes">🗑️ 清空</button>
-          </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-weight:600;font-size:14px">📋 订阅节点列表 ({{ nodes.length }})</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span v-if="saveStatus" style="font-size:12px;color:var(--text-muted)">{{ saveStatus }}</span>
+          <button class="btn btn-sm btn-secondary" @click="loadNodes">🔄 刷新</button>
+          <button class="btn btn-sm btn-danger" @click="handleClearNodes">🗑️ 清空</button>
         </div>
-        <span v-if="saveStatus" style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:8px">{{ saveStatus }}</span>
-        
-        <div style="max-height:400px;overflow-y:auto">
-          <div v-if="nodesLoading" style="color:var(--text-muted);font-size:13px;text-align:center;padding:16px">
-            ⏳ 加载中...
+      </div>
+
+      <div v-if="nodesLoading" style="color:var(--text-muted);font-size:13px;text-align:center;padding:32px">
+        ⏳ 加载中...
+      </div>
+      <div v-else-if="nodes.length === 0" style="color:var(--text-muted);font-size:13px;text-align:center;padding:32px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px">
+        暂无节点，请先在上方输入代理链接并转换保存
+      </div>
+      <div v-else class="node-grid">
+        <div v-for="(node, idx) in nodes" :key="idx" class="node-card">
+          <div class="node-card-header">
+            <span class="node-index">#{{ idx + 1 }}</span>
+            <span :class="['node-type-badge', 'type-' + (node.type || 'UNKNOWN').toLowerCase()]">
+              {{ node.type || 'UNKNOWN' }}
+            </span>
           </div>
-          <div v-else-if="nodes.length === 0" style="color:var(--text-muted);font-size:13px;text-align:center;padding:16px">
-             暂无节点
+          <div class="node-card-name" :title="node.name">
+            {{ node.name }}
           </div>
-          <div v-else v-for="(node, idx) in nodes" :key="idx" class="node-item">
-             <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
-               <span class="node-type-badge">{{ node.type || 'UNKNOWN' }}</span>
-               <span style="font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ node.name }}</span>
-             </div>
-             <button class="btn btn-sm btn-danger" @click="handleDeleteNode(idx)">删除</button>
+          <div class="node-card-footer">
+            <button class="node-delete-btn" @click="handleDeleteNode(idx)">✕ 删除</button>
           </div>
         </div>
       </div>
@@ -111,13 +116,11 @@ async function loadNodes() {
   }
 }
 
-
-
 async function handleClearNodes() {
   if (!confirm('确定要清空所有节点吗？')) return
   try {
     await clearNodes()
-    saveStatus.value = '已清空'
+    saveStatus.value = '✅ 已清空'
     await loadNodes()
     await refreshInfo()
     setTimeout(() => saveStatus.value = '', 3000)
@@ -172,27 +175,94 @@ onMounted(() => {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
 }
-.node-item {
+
+/* ===== 节点卡片网格 ===== */
+.node-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.node-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  backdrop-filter: blur(8px);
+}
+.node-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.node-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 8px;
-  border-bottom: 1px solid var(--border);
-  transition: background 0.2s;
 }
-.node-item:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-.node-item:last-child {
-  border-bottom: none;
-}
-.node-type-badge {
+.node-index {
   font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+.node-card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.node-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+}
+.node-delete-btn {
+  font-size: 11px;
+  padding: 4px 10px;
   border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.node-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+}
+
+/* ===== 协议类型标签颜色 ===== */
+.node-type-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   background: rgba(99, 102, 241, 0.15);
   color: #818cf8;
-  white-space: nowrap;
 }
+.type-vmess { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+.type-vless { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+.type-ss { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.type-ssr { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.type-trojan { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+.type-hysteria, .type-hysteria2 { background: rgba(236, 72, 153, 0.15); color: #f472b6; }
+.type-tuic { background: rgba(14, 165, 233, 0.15); color: #38bdf8; }
+.type-wireguard { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+.type-socks5 { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
+.type-snell { background: rgba(192, 132, 252, 0.15); color: #c084fc; }
+.type-unknown { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
 </style>
