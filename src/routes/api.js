@@ -8,11 +8,11 @@ const { updateFromSources } = require('../auto-update');
 // Auth middleware for API
 function requireAuth(req, res, next) {
     const { config } = require('../config');
-    if (!config || !config.security || !config.security.apiToken) {
+    if (!config || !config.security || (!config.security.apiKey && !config.security.enableAuth)) {
         return next();
     }
     const token = req.headers['authorization'] || req.query.token;
-    if (token !== `Bearer ${config.security.apiToken}` && token !== config.security.apiToken) {
+    if (token !== `Bearer ${config.security.apiKey}` && token !== config.security.apiKey) {
         return res.status(401).json({ error: '未授权访问' });
     }
     next();
@@ -164,6 +164,41 @@ router.get('/nodes', (req, res) => {
         }));
         res.json({ success: true, count: nodes.length, nodes });
     } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// POST /api/nodes
+router.post('/nodes', requireAuth, (req, res) => {
+    try {
+        const { link } = req.body;
+        if (!link || !link.trim()) return res.status(400).json({ error: '无效的节点链接' });
+
+        const { convertLinks } = require('../engine');
+        const result = convertLinks(link, 'raw');
+
+        if (result.proxies.length === 0) {
+            return res.status(400).json({ error: '无法解析该代理链接，支持 vmess/vless/ss/ssr/trojan 等标准协议' });
+        }
+
+        const nodesToSave = result.proxies.map(proxy => ({
+            name: proxy.name || 'Unknown',
+            type: (proxy.type || 'unknown').toUpperCase(),
+            server: proxy.server || 'unknown',
+            port: proxy.port || 0,
+            raw_link: link,
+            details: JSON.stringify(proxy)
+        }));
+
+        const { saveNodes } = require('../db/index');
+        saveNodes(nodesToSave);
+
+        const nodesCount = db.prepare('SELECT COUNT(*) as count FROM nodes').get().count;
+        setSetting('meta_updated_at', new Date().toISOString());
+
+        res.json({ success: true, count: nodesCount });
+    } catch (e) {
+        req.log.error(e, 'Add Single Node Error');
         res.status(500).json({ error: e.message });
     }
 });
