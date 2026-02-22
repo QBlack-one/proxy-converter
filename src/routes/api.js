@@ -25,7 +25,7 @@ router.post('/save', requireAuth, (req, res) => {
         const rawLinks = req.body.links || '';
         if (!rawLinks.trim()) return res.status(400).json({ error: '未提供有效的代理链接' });
 
-        const lines = rawLinks.split('\\n').filter(l => l.trim());
+        const lines = rawLinks.split(/\r?\n/).filter(l => l.trim());
         if (lines.length > config.security.maxLinksCount) {
             return res.status(400).json({ error: `链接数量超限 (最多 ${config.security.maxLinksCount} 条)` });
         }
@@ -131,7 +131,7 @@ router.get('/info', (req, res) => {
 router.get('/links', (req, res) => {
     try {
         const nodes = getNodes();
-        const rawContent = nodes.map(n => n.raw_link).join('\\n');
+        const rawContent = nodes.map(n => n.raw_link).join('\n');
         res.type('text').send(rawContent);
     } catch (e) {
         req.log.error(e, 'Get Links Error');

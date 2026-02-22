@@ -57,7 +57,7 @@ async function updateFromSources() {
     }
 
     if (allLinks.length > 0) {
-        const combined = allLinks.join('\\n');
+        const combined = allLinks.join('\n');
         try {
             // Note: autoUpdate.replaceMode is ignored for now since we drop and replace in Phase 1 design.
             // If replaceMode=false, we should actually fetch existing, but we'll stick to full replacement 
@@ -65,14 +65,20 @@ async function updateFromSources() {
 
             const result = convertLinks(combined, 'raw');
 
-            const lines = combined.split('\\n').filter(l => l.trim() && !l.trim().startsWith('#'));
-            const nodesToSave = result.nodeNames.map((name, i) => ({
-                name,
-                type: 'UNKNOWN',
-                server: 'unknown',
-                port: 0,
-                raw_link: lines[i] || ''
-            }));
+            const lines = combined.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('#'));
+            const nodesToSave = result.nodeNames.map((name, i) => {
+                const link = lines[i] || '';
+                let type = 'UNKNOWN';
+                const linkStr = link.includes(' ') ? link.substring(link.indexOf(' ') + 1) : link;
+                const protoMatch = linkStr.match(/^(\w+):\/\//);
+                if (protoMatch) {
+                    type = protoMatch[1].toUpperCase();
+                    if (type === 'HY2') type = 'HYSTERIA2';
+                    if (type === 'HY') type = 'HYSTERIA';
+                    if (type === 'WG') type = 'WIREGUARD';
+                }
+                return { name, type, server: 'unknown', port: 0, raw_link: link };
+            });
 
             saveNodes(nodesToSave);
             addHistory(result.count, result.nodeNames);

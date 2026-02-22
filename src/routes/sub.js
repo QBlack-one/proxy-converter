@@ -26,7 +26,7 @@ const FORMAT_FILENAME = {
 router.get('/', (req, res) => {
     try {
         const nodes = getNodes();
-        const rawContent = nodes.map(n => n.raw_link).join('\\n');
+        const rawContent = nodes.map(n => n.raw_link).join('\n');
 
         if (!rawContent.trim()) {
             return res.status(404).type('text').send('暂无保存的代理链接\\n请先在网页面板中粘贴链接并点击「保存到订阅服务」');
