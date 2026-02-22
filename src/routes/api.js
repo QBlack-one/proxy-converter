@@ -48,7 +48,8 @@ router.post('/save', requireAuth, (req, res) => {
             }
             return { name, type, server: 'unknown', port: 0, raw_link: link };
         });
-        saveNodes(nodesToSave);
+        const addedCount = saveNodes(nodesToSave);
+        const totalCount = db.prepare('SELECT COUNT(*) as count FROM nodes').get().count;
 
         // History
         addHistory(result.count, result.nodeNames);
@@ -60,8 +61,9 @@ router.post('/save', requireAuth, (req, res) => {
 
         res.json({
             success: true,
-            count: result.count,
-            newCount: result.count,
+            count: totalCount,
+            newCount: addedCount,
+            duplicateCount: result.count - addedCount,
             updatedAt: new Date().toISOString(),
             subUrls: {
                 universal: baseUrl,
