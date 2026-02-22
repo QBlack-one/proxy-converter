@@ -33,13 +33,21 @@ router.post('/save', requireAuth, (req, res) => {
         const result = convertLinks(rawLinks, 'raw');
 
         // Save to DB
-        const nodesToSave = result.nodeNames.map((name, i) => ({
-            name,
-            type: 'UNKNOWN', // Simplified
-            server: 'unknown',
-            port: 0,
-            raw_link: lines[i] || ''
-        }));
+        const nodesToSave = result.nodeNames.map((name, i) => {
+            const link = lines[i] || '';
+            // 解析协议类型: 支持 "名称 协议://..." 和 "协议://..." 两种格式
+            let type = 'UNKNOWN';
+            const linkStr = link.includes(' ') ? link.substring(link.indexOf(' ') + 1) : link;
+            const protoMatch = linkStr.match(/^(\w+):\/\//);
+            if (protoMatch) {
+                type = protoMatch[1].toUpperCase();
+                // 统一 Hysteria2 的 hy2 前缀
+                if (type === 'HY2') type = 'HYSTERIA2';
+                if (type === 'HY') type = 'HYSTERIA';
+                if (type === 'WG') type = 'WIREGUARD';
+            }
+            return { name, type, server: 'unknown', port: 0, raw_link: link };
+        });
         saveNodes(nodesToSave);
 
         // History
