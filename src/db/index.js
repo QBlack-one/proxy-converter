@@ -44,22 +44,25 @@ const deleteAllNodesStmt = db.prepare('DELETE FROM nodes');
 
 function saveNodes(nodesArray) {
     const transaction = db.transaction((nodes) => {
-        // 获取已有的 raw_link 用于去重
-        const existing = new Set(
-            db.prepare('SELECT raw_link FROM nodes').all().map(r => r.raw_link)
-        );
+        // 获取已有节点的 name 和 raw_link 用于去重
+        const rows = db.prepare('SELECT name, raw_link FROM nodes').all();
+        const existingNames = new Set(rows.map(r => r.name.trim()));
+        const existingLinks = new Set(rows.map(r => (r.raw_link || '').trim()));
         let addedCount = 0;
         for (const node of nodes) {
-            const link = node.raw_link || '';
-            if (!link || existing.has(link)) continue; // 跳过空链接和重复节点
+            const name = (node.name || '').trim();
+            const link = (node.raw_link || '').trim();
+            // 按名称或链接去重
+            if (!name || existingNames.has(name) || (link && existingLinks.has(link))) continue;
             insertNodeStmt.run({
-                name: node.name || 'Unknown',
+                name: name || 'Unknown',
                 type: node.type || 'unknown',
                 server: node.server || 'unknown',
                 port: node.port || 0,
                 raw_link: link
             });
-            existing.add(link);
+            existingNames.add(name);
+            if (link) existingLinks.add(link);
             addedCount++;
         }
         return addedCount;
