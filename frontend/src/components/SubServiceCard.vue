@@ -42,22 +42,17 @@
       </div>
     </div>
 
-    <!-- Controls -->
-    <div class="btn-row" style="margin-bottom:16px">
-      <button class="btn btn-secondary" @click="toggleNodeManage">
-        {{ showNodeManage ? '🔽 收起节点列表' : '📋 节点管理' }}
-      </button>
-      <button class="btn btn-danger" @click="handleClearNodes">🗑️ 清空所有节点</button>
-      <span v-if="saveStatus" style="font-size:12px;color:var(--text-muted);align-self:center">{{ saveStatus }}</span>
-    </div>
-
-    <!-- Node List -->
-    <div v-if="showNodeManage" style="margin-bottom:16px">
+    <!-- Node List (默认展示) -->
+    <div style="margin-bottom:16px">
       <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <span style="font-weight:600;font-size:14px">📋 订阅节点列表 ({{ nodes.length }})</span>
-          <button class="btn btn-sm btn-secondary" @click="showNodeManage = false">✕ 关闭</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm btn-secondary" @click="loadNodes">🔄 刷新</button>
+            <button class="btn btn-sm btn-danger" @click="handleClearNodes">🗑️ 清空</button>
+          </div>
         </div>
+        <span v-if="saveStatus" style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:8px">{{ saveStatus }}</span>
         
         <div style="max-height:400px;overflow-y:auto">
           <div v-if="nodesLoading" style="color:var(--text-muted);font-size:13px;text-align:center;padding:16px">
@@ -87,7 +82,6 @@ const { getInfo, getNodes, clearNodes, deleteNode } = useApi()
 
 const info = ref(null)
 const nodes = ref([])
-const showNodeManage = ref(false)
 const nodesLoading = ref(false)
 const saveStatus = ref('')
 const copyStatusUniversal = ref('')
@@ -117,12 +111,7 @@ async function loadNodes() {
   }
 }
 
-async function toggleNodeManage() {
-  showNodeManage.value = !showNodeManage.value
-  if (showNodeManage.value) {
-    await loadNodes()
-  }
-}
+
 
 async function handleClearNodes() {
   if (!confirm('确定要清空所有节点吗？')) return
@@ -164,6 +153,7 @@ function copySubLink(format) {
 
 onMounted(() => {
   refreshInfo()
+  loadNodes()
 })
 </script>
 
