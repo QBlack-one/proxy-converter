@@ -10,10 +10,10 @@ module.exports = {
             const proxy = {
                 name: decodeURIComponent(url.hash.slice(1)) || 'Hysteria2 Node',
                 type: 'hysteria2',
-                server: url.hostname,
+                server: url.hostname.replace(/^\[|\]$/g, ''),
                 port: parseInt(url.port) || 443,
                 password: decodeURIComponent(url.username),
-                sni: params.get('sni') || url.hostname,
+                sni: params.get('sni') || url.hostname.replace(/^\[|\]$/g, ''),
                 'skip-cert-verify': params.get('insecure') === '1'
             };
             if (params.get('obfs')) proxy.obfs = params.get('obfs');

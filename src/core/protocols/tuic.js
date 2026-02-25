@@ -9,11 +9,11 @@ module.exports = {
             const proxy = {
                 name: decodeURIComponent(url.hash.slice(1)) || 'TUIC Node',
                 type: 'tuic',
-                server: url.hostname,
+                server: url.hostname.replace(/^\[|\]$/g, ''),
                 port: parseInt(url.port) || 443,
                 uuid: url.username,
                 password: decodeURIComponent(url.password || ''),
-                sni: params.get('sni') || url.hostname,
+                sni: params.get('sni') || url.hostname.replace(/^\[|\]$/g, ''),
                 'skip-cert-verify': params.get('allow_insecure') === '1' || params.get('insecure') === '1',
                 'congestion-controller': params.get('congestion_control') || 'bbr',
                 'udp-relay-mode': params.get('udp_relay_mode') || 'native'

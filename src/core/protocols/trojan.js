@@ -9,10 +9,10 @@ module.exports = {
             const proxy = {
                 name: decodeURIComponent(url.hash.slice(1)) || 'Trojan Node',
                 type: 'trojan',
-                server: url.hostname,
+                server: url.hostname.replace(/^\[|\]$/g, ''),
                 port: parseInt(url.port) || 443,
                 password: decodeURIComponent(url.username),
-                sni: params.get('sni') || url.hostname,
+                sni: params.get('sni') || url.hostname.replace(/^\[|\]$/g, ''),
                 'skip-cert-verify': true
             };
             const network = params.get('type') || 'tcp';

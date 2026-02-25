@@ -8,7 +8,7 @@ module.exports = {
             const proxy = {
                 name: decodeURIComponent(url.hash.slice(1)) || 'NaiveProxy Node',
                 type: 'naive',
-                server: url.hostname,
+                server: url.hostname.replace(/^\[|\]$/g, ''),
                 port: parseInt(url.port) || 443,
                 username: decodeURIComponent(url.username) || '',
                 password: decodeURIComponent(url.password) || ''

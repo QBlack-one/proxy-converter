@@ -6,7 +6,7 @@ module.exports = {
             const proxy = {
                 name: decodeURIComponent(url.hash.slice(1)) || 'AnyTLS Node',
                 type: 'anytls',
-                server: url.hostname,
+                server: url.hostname.replace(/^\[|\]$/g, ''),
                 port: parseInt(url.port) || 443
             };
             if (url.username || url.password) {

@@ -6,7 +6,7 @@ module.exports = {
             const proxy = {
                 name: decodeURIComponent(url.hash.slice(1)) || 'SOCKS5 Node',
                 type: 'socks5',
-                server: url.hostname,
+                server: url.hostname.replace(/^\[|\]$/g, ''),
                 port: parseInt(url.port) || 1080
             };
             if (url.username || url.password) {

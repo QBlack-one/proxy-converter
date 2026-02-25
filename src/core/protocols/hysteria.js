@@ -9,12 +9,12 @@ module.exports = {
             const proxy = {
                 name: decodeURIComponent(url.hash.slice(1)) || 'Hysteria Node',
                 type: 'hysteria',
-                server: url.hostname,
+                server: url.hostname.replace(/^\[|\]$/g, ''),
                 port: parseInt(url.port) || 443,
                 'auth-str': params.get('auth') || decodeURIComponent(url.username) || '',
                 up: params.get('upmbps') || '100',
                 down: params.get('downmbps') || '100',
-                sni: params.get('peer') || params.get('sni') || url.hostname,
+                sni: params.get('peer') || params.get('sni') || url.hostname.replace(/^\[|\]$/g, ''),
                 'skip-cert-verify': params.get('insecure') === '1',
                 protocol: params.get('protocol') || 'udp'
             };

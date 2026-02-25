@@ -10,7 +10,7 @@ module.exports = {
             const proxy = {
                 name: decodeURIComponent(url.hash.slice(1)) || 'WireGuard Node',
                 type: 'wireguard',
-                server: url.hostname,
+                server: url.hostname.replace(/^\[|\]$/g, ''),
                 port: parseInt(url.port) || 51820,
                 'private-key': params.get('privatekey') || params.get('prikey') || '',
                 'public-key': params.get('publickey') || params.get('pubkey') || decodeURIComponent(url.username) || '',
