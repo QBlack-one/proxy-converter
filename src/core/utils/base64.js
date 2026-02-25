@@ -18,7 +18,17 @@ function b64Encode(str) {
     }
 }
 
+// IPv6 地址在 URI 中需要 [] 包裹
+function wrapIPv6(server) {
+    if (!server) return server;
+    if (server.includes(':') && !server.startsWith('[')) {
+        return '[' + server + ']';
+    }
+    return server;
+}
+
 module.exports = {
     b64Decode,
-    b64Encode
+    b64Encode,
+    wrapIPv6
 };

@@ -1,4 +1,4 @@
-const { b64Decode, b64Encode } = require('../utils/base64');
+const { b64Decode, b64Encode, wrapIPv6 } = require('../utils/base64');
 
 module.exports = {
     id: 'hysteria2',
@@ -30,6 +30,6 @@ module.exports = {
         if (p['skip-cert-verify']) params.set('insecure', '1');
         if (p.obfs) params.set('obfs', p.obfs);
         if (p['obfs-password']) params.set('obfs-password', p['obfs-password']);
-        return `hysteria2://${encodeURIComponent(p.password)}@${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+        return `hysteria2://${encodeURIComponent(p.password)}@${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
     }
 };

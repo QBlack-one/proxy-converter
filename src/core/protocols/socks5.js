@@ -1,3 +1,5 @@
+const { wrapIPv6 } = require('../utils/base64');
+
 module.exports = {
     id: 'socks5',
     parse(link) {
@@ -20,11 +22,10 @@ module.exports = {
         }
     },
     encode(p) {
-        const params = new URLSearchParams();
         let auth = '';
         if (p.username || p.password) {
             auth = `${encodeURIComponent(p.username || '')}:${encodeURIComponent(p.password || '')}@`;
         }
-        return `socks5://${auth}${p.server}:${p.port}#${encodeURIComponent(p.name || '')}`;
+        return `socks5://${auth}${wrapIPv6(p.server)}:${p.port}#${encodeURIComponent(p.name || '')}`;
     }
 };

@@ -1,4 +1,4 @@
-const { b64Decode, b64Encode } = require('../utils/base64');
+const { b64Decode, b64Encode, wrapIPv6 } = require('../utils/base64');
 
 module.exports = {
     id: 'hysteria',
@@ -36,6 +36,6 @@ module.exports = {
         if (p.obfs) params.set('obfs', p.obfs);
         if (p.protocol) params.set('protocol', p.protocol);
         if (p.alpn) params.set('alpn', Array.isArray(p.alpn) ? p.alpn[0] : p.alpn);
-        return `hysteria://${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+        return `hysteria://${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
     }
 };

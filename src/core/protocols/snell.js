@@ -1,3 +1,5 @@
+const { wrapIPv6 } = require('../utils/base64');
+
 module.exports = {
     id: 'snell',
     parse(link) {
@@ -32,6 +34,6 @@ module.exports = {
             params.set('obfs', p.obfs);
             if (p['obfs-host']) params.set('obfs-host', p['obfs-host']);
         }
-        return `snell://${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+        return `snell://${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
     }
 };

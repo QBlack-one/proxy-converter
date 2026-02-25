@@ -1,4 +1,4 @@
-const { b64Decode, b64Encode } = require('../utils/base64');
+const { b64Decode, b64Encode, wrapIPv6 } = require('../utils/base64');
 
 module.exports = {
     id: 'ss',
@@ -51,7 +51,7 @@ module.exports = {
     },
     encode(p) {
         const userInfo = b64Encode(`${p.cipher}:${p.password}`);
-        let link = `ss://${userInfo}@${p.server}:${p.port}`;
+        let link = `ss://${userInfo}@${wrapIPv6(p.server)}:${p.port}`;
         const params = new URLSearchParams();
         if (p.plugin) {
             let pluginStr = p.plugin;

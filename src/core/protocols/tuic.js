@@ -1,4 +1,4 @@
-const { b64Decode, b64Encode } = require('../utils/base64');
+const { b64Decode, b64Encode, wrapIPv6 } = require('../utils/base64');
 
 module.exports = {
     id: 'tuic',
@@ -33,6 +33,6 @@ module.exports = {
         if (p['udp-relay-mode']) params.set('udp_relay_mode', p['udp-relay-mode']);
         if (p.alpn) params.set('alpn', Array.isArray(p.alpn) ? p.alpn.join(',') : p.alpn);
         const pw = p.password ? `:${encodeURIComponent(p.password)}` : '';
-        return `tuic://${p.uuid}${pw}@${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+        return `tuic://${p.uuid}${pw}@${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
     }
 };

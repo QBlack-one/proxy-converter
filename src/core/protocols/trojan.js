@@ -1,4 +1,4 @@
-const { b64Decode, b64Encode } = require('../utils/base64');
+const { b64Decode, b64Encode, wrapIPv6 } = require('../utils/base64');
 
 module.exports = {
     id: 'trojan',
@@ -45,6 +45,6 @@ module.exports = {
             }
         }
         if (p['client-fingerprint']) params.set('fp', p['client-fingerprint']);
-        return `trojan://${encodeURIComponent(p.password)}@${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+        return `trojan://${encodeURIComponent(p.password)}@${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
     }
 };

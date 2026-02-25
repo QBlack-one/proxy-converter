@@ -1,4 +1,4 @@
-const { b64Decode, b64Encode } = require('../utils/base64');
+const { b64Decode, b64Encode, wrapIPv6 } = require('../utils/base64');
 
 module.exports = {
     id: 'wireguard',
@@ -33,6 +33,6 @@ module.exports = {
         if (p.mtu) params.set('mtu', String(p.mtu));
         if (p.reserved) params.set('reserved', p.reserved);
         if (p.dns) params.set('dns', Array.isArray(p.dns) ? p.dns.join(',') : p.dns);
-        return `wireguard://${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+        return `wireguard://${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
     }
 };

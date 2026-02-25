@@ -1,4 +1,4 @@
-const { b64Decode, b64Encode } = require('../utils/base64');
+const { b64Decode, b64Encode, wrapIPv6 } = require('../utils/base64');
 
 module.exports = {
     id: 'vless',
@@ -68,6 +68,6 @@ module.exports = {
             params.set('path', p['h2-opts'].path || '/');
             if (Array.isArray(p['h2-opts'].host) && p['h2-opts'].host[0]) params.set('host', p['h2-opts'].host[0]);
         }
-        return `vless://${p.uuid}@${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+        return `vless://${p.uuid}@${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
     }
 };

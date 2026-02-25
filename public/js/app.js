@@ -174,7 +174,8 @@ function renderNodes(proxies) {
     grid.innerHTML = proxies.map(p => {
         const typeCls = `type-${p.type}`;
         const cardCls = `type-${p.type}-card`;
-        const infos = [`<div class="node-info-item"><span class="label">服务器</span><span class="value">${esc(p.server)}:${p.port}</span></div>`];
+        const serverDisplay = p.server && p.server.includes(':') ? `[${esc(p.server)}]:${p.port}` : `${esc(p.server)}:${p.port}`;
+        const infos = [`<div class="node-info-item"><span class="label">服务器</span><span class="value">${serverDisplay}</span></div>`];
         if (p.uuid) infos.push(`<div class="node-info-item"><span class="label">UUID</span><span class="value">${esc(p.uuid)}</span></div>`);
         if (p.cipher) infos.push(`<div class="node-info-item"><span class="label">加密</span><span class="value">${esc(p.cipher)}</span></div>`);
         if (p.network && p.network !== 'tcp') infos.push(`<div class="node-info-item"><span class="label">传输</span><span class="value">${esc(p.network)}</span></div>`);
@@ -424,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.format-tab').forEach(tab => {
         tab.addEventListener('click', () => switchFormat(tab.dataset.format));
     });
-    
+
     // 初始化无节点的默认展示UI
     renderAll();
     // 加载订阅节点列表

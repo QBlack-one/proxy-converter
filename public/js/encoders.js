@@ -3,6 +3,16 @@
  * 将内部节点对象编码回协议链接
  */
 
+// IPv6 地址需要在 URI 中用 [] 包裹
+function wrapIPv6(server) {
+    if (!server) return server;
+    // 如果已经有方括号则不处理，如果包含冒号则是 IPv6
+    if (server.includes(':') && !server.startsWith('[')) {
+        return '[' + server + ']';
+    }
+    return server;
+}
+
 function encodeVmess(p) {
     const json = {
         v: '2',
@@ -55,12 +65,12 @@ function encodeVless(p) {
         params.set('path', p['h2-opts'].path || '/');
         if (Array.isArray(p['h2-opts'].host) && p['h2-opts'].host[0]) params.set('host', p['h2-opts'].host[0]);
     }
-    return `vless://${p.uuid}@${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+    return `vless://${p.uuid}@${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
 }
 
 function encodeSS(p) {
     const userInfo = b64Encode(`${p.cipher}:${p.password}`);
-    let link = `ss://${userInfo}@${p.server}:${p.port}`;
+    let link = `ss://${userInfo}@${wrapIPv6(p.server)}:${p.port}`;
     const params = new URLSearchParams();
     if (p.plugin) {
         let pluginStr = p.plugin;
@@ -101,7 +111,7 @@ function encodeTrojan(p) {
         }
     }
     if (p['client-fingerprint']) params.set('fp', p['client-fingerprint']);
-    return `trojan://${encodeURIComponent(p.password)}@${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+    return `trojan://${encodeURIComponent(p.password)}@${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
 }
 
 function encodeHysteria(p) {
@@ -114,7 +124,7 @@ function encodeHysteria(p) {
     if (p.obfs) params.set('obfs', p.obfs);
     if (p.protocol) params.set('protocol', p.protocol);
     if (p.alpn) params.set('alpn', Array.isArray(p.alpn) ? p.alpn[0] : p.alpn);
-    return `hysteria://${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+    return `hysteria://${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
 }
 
 function encodeHysteria2(p) {
@@ -123,7 +133,7 @@ function encodeHysteria2(p) {
     if (p['skip-cert-verify']) params.set('insecure', '1');
     if (p.obfs) params.set('obfs', p.obfs);
     if (p['obfs-password']) params.set('obfs-password', p['obfs-password']);
-    return `hysteria2://${encodeURIComponent(p.password)}@${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+    return `hysteria2://${encodeURIComponent(p.password)}@${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
 }
 
 function encodeTuic(p) {
@@ -134,7 +144,7 @@ function encodeTuic(p) {
     if (p['udp-relay-mode']) params.set('udp_relay_mode', p['udp-relay-mode']);
     if (p.alpn) params.set('alpn', Array.isArray(p.alpn) ? p.alpn.join(',') : p.alpn);
     const pw = p.password ? `:${encodeURIComponent(p.password)}` : '';
-    return `tuic://${p.uuid}${pw}@${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+    return `tuic://${p.uuid}${pw}@${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
 }
 
 function encodeWireGuard(p) {
@@ -145,7 +155,7 @@ function encodeWireGuard(p) {
     if (p.mtu) params.set('mtu', String(p.mtu));
     if (p.reserved) params.set('reserved', p.reserved);
     if (p.dns) params.set('dns', Array.isArray(p.dns) ? p.dns.join(',') : p.dns);
-    return `wireguard://${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+    return `wireguard://${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
 }
 
 // ==================== SOCKS5 ====================
@@ -156,7 +166,7 @@ function encodeSocks5(p) {
     if (p.username || p.password) {
         auth = `${encodeURIComponent(p.username || '')}:${encodeURIComponent(p.password || '')}@`;
     }
-    return `socks5://${auth}${p.server}:${p.port}#${encodeURIComponent(p.name || '')}`;
+    return `socks5://${auth}${wrapIPv6(p.server)}:${p.port}#${encodeURIComponent(p.name || '')}`;
 }
 
 // ==================== Snell ====================
@@ -169,7 +179,7 @@ function encodeSnell(p) {
         params.set('obfs', p.obfs);
         if (p['obfs-host']) params.set('obfs-host', p['obfs-host']);
     }
-    return `snell://${p.server}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
+    return `snell://${wrapIPv6(p.server)}:${p.port}?${params.toString()}#${encodeURIComponent(p.name || '')}`;
 }
 
 // ==================== NaiveProxy ====================
@@ -179,7 +189,7 @@ function encodeNaive(p) {
     if (p.username || p.password) {
         auth = `${encodeURIComponent(p.username || '')}:${encodeURIComponent(p.password || '')}@`;
     }
-    return `naive+https://${auth}${p.server}:${p.port}#${encodeURIComponent(p.name || '')}`;
+    return `naive+https://${auth}${wrapIPv6(p.server)}:${p.port}#${encodeURIComponent(p.name || '')}`;
 }
 
 // ==================== AnyTLS ====================
@@ -189,7 +199,7 @@ function encodeAnyTLS(p) {
     if (p.username || p.password) {
         auth = `${encodeURIComponent(p.username || '')}:${encodeURIComponent(p.password || '')}@`;
     }
-    return `anytls://${auth}${p.server}:${p.port}#${encodeURIComponent(p.name || '')}`;
+    return `anytls://${auth}${wrapIPv6(p.server)}:${p.port}#${encodeURIComponent(p.name || '')}`;
 }
 
 // ==================== 统一编码入口 ====================

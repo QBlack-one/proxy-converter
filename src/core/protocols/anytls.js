@@ -1,3 +1,5 @@
+const { wrapIPv6 } = require('../utils/base64');
+
 module.exports = {
     id: 'anytls',
     parse(link) {
@@ -24,6 +26,6 @@ module.exports = {
         if (p.username || p.password) {
             auth = `${encodeURIComponent(p.username || '')}:${encodeURIComponent(p.password || '')}@`;
         }
-        return `anytls://${auth}${p.server}:${p.port}#${encodeURIComponent(p.name || '')}`;
+        return `anytls://${auth}${wrapIPv6(p.server)}:${p.port}#${encodeURIComponent(p.name || '')}`;
     }
 };
