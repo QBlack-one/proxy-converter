@@ -330,5 +330,48 @@ router.post('/subscription/reset-traffic', requireAuth, (req, res) => {
     }
 });
 
+// POST /api/convert
+router.post('/convert', (req, res) => {
+    try {
+        const { input, format = 'clash-yaml' } = req.body;
+        if (!input || !input.trim()) {
+            return res.status(400).json({ error: '请提供代理链接或订阅内容' });
+        }
+
+        const { config } = require('../config');
+        const options = {
+            title: 'xinghe',
+            httpPort: config.defaults.httpPort,
+            socksPort: config.defaults.socksPort,
+            allowLan: true,
+            mode: config.defaults.mode,
+            logLevel: config.defaults.logLevel,
+            enableDns: true,
+            testUrl: 'http://www.gstatic.com/generate_204',
+            testInterval: config.defaults.testInterval
+        };
+
+        const result = convertLinks(input, format, options);
+
+        // 统计各协议数量
+        const stats = {};
+        result.proxies.forEach(p => {
+            const t = (p.type || 'unknown').toUpperCase();
+            stats[t] = (stats[t] || 0) + 1;
+        });
+
+        res.json({
+            success: true,
+            count: result.count,
+            stats,
+            proxies: result.proxies,
+            output: result.output
+        });
+    } catch (e) {
+        req.log.error(e, 'Convert Error');
+        res.status(400).json({ error: e.message });
+    }
+});
+
 module.exports = router;
 

@@ -1,6 +1,4 @@
-const express = require('express');
-const { parseLink } = require('./core/protocols/index');
-const { extractLinks } = require('./core/protocols/index');
+const { parseLink, extractLinks } = require('./core/protocols/index');
 const OUTPUT_FORMATS = require('./core/generators/index').OUTPUT_FORMATS;
 
 function convertLinks(input, formatKey = 'base64', options = {}) {

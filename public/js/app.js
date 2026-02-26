@@ -1,6 +1,6 @@
 /**
- * 代理订阅转换器 - 主应用逻辑
- * 功能: 转换、筛选搜索、去重、拖拽上传、配置面板、多格式输出、订阅链接
+ * 代理订阅转换器 - 主应用逻辑 (API 驱动版)
+ * 所有解析和格式生成逻辑由后端 POST /api/convert 处理
  */
 
 // ==================== 全局状态 ====================
@@ -10,9 +10,22 @@ let filteredProxies = [];
 let currentOutput = '';
 let currentFormat = 'clash-yaml';
 let activeFilters = new Set();
+let cachedInput = ''; // 缓存原始输入，用于切换格式
 
 // API 密钥（从 localStorage 读取）
 let apiKey = localStorage.getItem('apiKey') || '';
+
+const SUB_SERVER = window.location.origin;
+
+// 格式元数据（用于下载按钮文案等）
+const FORMAT_META = {
+    'clash-yaml': { name: 'Clash YAML', ext: '.yaml' },
+    'clash-meta': { name: 'Clash Meta', ext: '.yaml' },
+    surge: { name: 'Surge', ext: '.conf' },
+    'sing-box': { name: 'Sing-Box', ext: '.json' },
+    base64: { name: 'Base64 订阅', ext: '.txt' },
+    raw: { name: '原始链接', ext: '.txt' }
+};
 
 // 获取带认证的 fetch 选项
 function getFetchOptions(options = {}) {
@@ -23,7 +36,7 @@ function getFetchOptions(options = {}) {
     return { ...options, headers, mode: 'cors' };
 }
 
-// ==================== 转换入口 ====================
+// ==================== 转换入口（调用后端 API）====================
 
 function convert() {
     const input = document.getElementById('inputArea').value.trim();
@@ -35,49 +48,44 @@ function convert() {
     const btn = document.getElementById('btnConvert');
     btn.textContent = '⏳ 解析中...';
     btn.disabled = true;
+    cachedInput = input;
 
-    setTimeout(() => {
-        try {
-            const links = extractLinks(input);
-            allProxies = [];
-            let failCount = 0;
+    fetch(SUB_SERVER + '/api/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input, format: currentFormat })
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.error || '转换失败');
 
-            for (const link of links) {
-                const node = parseLink(link);
-                if (node) {
-                    allProxies.push(node);
-                } else if (link.includes('://')) {
-                    failCount++;
-                }
-            }
+            allProxies = data.proxies || [];
+            currentOutput = data.output || '';
 
-            if (allProxies.length === 0) {
-                showToast('未能解析出任何有效节点', 'error');
-                btn.textContent = '🔄 转换';
-                btn.disabled = false;
-                return;
-            }
-
-            if (document.getElementById('cfgDedupe').checked) {
-                const before = allProxies.length;
-                allProxies = deduplicateProxies(allProxies);
-                const removed = before - allProxies.length;
-                if (removed > 0) showToast(`已去除 ${removed} 个重复节点`, 'warning');
-            }
+            // 去重
+            const before = allProxies.length;
+            allProxies = deduplicateProxies(allProxies);
+            const removed = before - allProxies.length;
+            if (removed > 0) showToast(`已去除 ${removed} 个重复节点`, 'warning');
 
             activeFilters.clear();
             filteredProxies = [...allProxies];
 
-            renderAll();
+            renderStats(data.stats);
+            renderFilterChips();
+            renderNodes(filteredProxies);
+            renderOutputPreview();
+
             document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
-            showToast(`✅ 成功解析 ${allProxies.length} 个节点` + (failCount ? `，${failCount} 个失败` : ''), 'success');
-        } catch (e) {
+            showToast(`✅ 成功解析 ${allProxies.length} 个节点`, 'success');
+        })
+        .catch(e => {
             showToast('解析出错: ' + e.message, 'error');
-        } finally {
+        })
+        .finally(() => {
             btn.textContent = '🔄 转换';
             btn.disabled = false;
-        }
-    }, 50);
+        });
 }
 
 // ==================== 去重 ====================
@@ -92,29 +100,20 @@ function deduplicateProxies(proxies) {
     });
 }
 
-// ==================== 渲染全部 ====================
-
-function renderAll() {
-    renderStats();
-    renderFilterChips();
-    applyFilter();
-}
-
 // ==================== 统计 ====================
 
-function renderStats() {
-    const stats = {};
-    allProxies.forEach(p => {
-        const t = p.type.toUpperCase();
-        stats[t] = (stats[t] || 0) + 1;
-    });
-
+function renderStats(stats) {
     const row = document.getElementById('statsRow');
     const typeColors = {
         VMESS: '#818cf8', VLESS: '#34d399', SS: '#60a5fa',
         SSR: '#f472b6', TROJAN: '#fbbf24', HYSTERIA: '#fb923c',
         HYSTERIA2: '#c4b5fd', TUIC: '#2dd4bf', WIREGUARD: '#a3e635'
     };
+
+    if (!stats || Object.keys(stats).length === 0) {
+        row.innerHTML = '';
+        return;
+    }
 
     let html = `<div class="stat-chip"><span>总计</span><span class="count">${allProxies.length}</span></div>`;
     for (const [type, count] of Object.entries(stats)) {
@@ -157,7 +156,6 @@ function applyFilter() {
         return true;
     });
     renderNodes(filteredProxies);
-    renderOutput(filteredProxies);
 }
 
 // ==================== 节点列表渲染 ====================
@@ -179,8 +177,6 @@ function renderNodes(proxies) {
         if (p.uuid) infos.push(`<div class="node-info-item"><span class="label">UUID</span><span class="value">${esc(p.uuid)}</span></div>`);
         if (p.cipher) infos.push(`<div class="node-info-item"><span class="label">加密</span><span class="value">${esc(p.cipher)}</span></div>`);
         if (p.network && p.network !== 'tcp') infos.push(`<div class="node-info-item"><span class="label">传输</span><span class="value">${esc(p.network)}</span></div>`);
-        if (p.protocol) infos.push(`<div class="node-info-item"><span class="label">协议</span><span class="value">${esc(p.protocol)}</span></div>`);
-        if (p.password) infos.push(`<div class="node-info-item"><span class="label">密码</span><span class="value">${esc(p.password.length > 20 ? p.password.substring(0, 20) + '...' : p.password)}</span></div>`);
         if (p.tls) infos.push(`<div class="node-info-item"><span class="label">TLS</span><span class="value" style="color:var(--success)">✓ 启用</span></div>`);
 
         return `<div class="node-card ${cardCls}"><div class="node-header"><span class="node-name" title="${esc(p.name)}">${esc(p.name)}</span><span class="node-type ${typeCls}">${p.type}</span></div><div class="node-info">${infos.join('')}</div></div>`;
@@ -194,88 +190,56 @@ function esc(str) {
     return d.innerHTML;
 }
 
-
-
-// ==================== 多格式输出 ====================
+// ==================== 格式切换 ====================
 
 function switchFormat(format) {
     currentFormat = format;
-    // 更新 tab 样式
     document.querySelectorAll('.format-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.format === format);
     });
-    if (filteredProxies.length > 0) renderOutput(filteredProxies);
+
+    // 如果有缓存输入，重新请求后端转换为新格式
+    if (cachedInput && allProxies.length > 0) {
+        fetch(SUB_SERVER + '/api/convert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input: cachedInput, format })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    currentOutput = data.output || '';
+                    renderOutputPreview();
+                }
+            })
+            .catch(() => { });
+    }
 }
 
-function renderOutput(proxies) {
-    const fmt = OUTPUT_FORMATS[currentFormat];
-    if (!fmt) return;
+// ==================== 输出预览 ====================
 
-    const options = getConfigOptions();
-    currentOutput = fmt.generate(proxies, options);
+function renderOutputPreview() {
     document.getElementById('outputPreview').textContent = currentOutput;
-
-    // 更新下载按钮文案
-    const dlBtn = document.getElementById('btnDownload');
-    dlBtn.textContent = `💾 下载 ${fmt.name} (${fmt.ext})`;
-
-    // 更新订阅链接区域
-    renderSubscription(proxies);
-}
-
-function renderSubscription(proxies) {
-    const subContent = generateBase64Sub(proxies);
-    document.getElementById('subBase64').value = subContent;
-    const rawLinks = generateRawLinks(proxies);
-    document.getElementById('subLinkCount').textContent = `${rawLinks.split('\n').filter(l => l).length} 条链接`;
-}
-
-function getConfigOptions() {
-    return {
-        title: 'xinghe',
-        httpPort: parseInt(document.getElementById('cfgHttpPort').value) || 7890,
-        socksPort: parseInt(document.getElementById('cfgSocksPort').value) || 7891,
-        allowLan: document.getElementById('cfgAllowLan').value === 'true',
-        mode: document.getElementById('cfgMode').value,
-        logLevel: document.getElementById('cfgLogLevel').value,
-        enableDns: document.getElementById('cfgDns').value === 'true',
-        testUrl: 'http://www.gstatic.com/generate_204',
-        testInterval: parseInt(document.getElementById('cfgInterval').value) || 300
-    };
-}
-
-function buildConfigQueryString() {
-    const opts = getConfigOptions();
-    const params = new URLSearchParams();
-    if (opts.httpPort !== 7890) params.append('port', opts.httpPort);
-    if (opts.socksPort !== 7891) params.append('socks', opts.socksPort);
-    if (!opts.allowLan) params.append('lan', 'false');
-    if (opts.mode !== 'rule') params.append('mode', opts.mode);
-    const qs = params.toString();
-    return qs ? `&${qs}` : '';
+    const meta = FORMAT_META[currentFormat] || { name: currentFormat, ext: '.txt' };
+    document.getElementById('btnDownload').textContent = `💾 下载 ${meta.name} (${meta.ext})`;
 }
 
 // ==================== 操作函数 ====================
 
 function downloadConfig() {
     if (!currentOutput) return;
-    const fmt = OUTPUT_FORMATS[currentFormat];
-    const blob = new Blob([currentOutput], { type: fmt.mime + ';charset=utf-8' });
+    const meta = FORMAT_META[currentFormat] || { name: currentFormat, ext: '.txt' };
+    const blob = new Blob([currentOutput], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-
-    // 强制硬编码 title 为 xinghe
-    const title = 'xinghe';
     const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
-    const defaultName = `${title}_${dateStr}${fmt.ext}`;
-    a.download = defaultName;
-
+    a.download = `xinghe_${dateStr}${meta.ext}`;
     a.href = url;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast(`💾 ${fmt.name} 配置已下载`, 'success');
+    showToast(`💾 ${meta.name} 配置已下载`, 'success');
 }
 
 function copyConfig() {
@@ -284,46 +248,22 @@ function copyConfig() {
     showToast('📋 配置已复制到剪贴板', 'success');
 }
 
-function copySubscription() {
-    const subContent = document.getElementById('subBase64').value;
-    if (!subContent) return;
-    writeClipboard(subContent);
-    showToast('📋 订阅内容已复制', 'success');
-}
-
-function copyRawLinks() {
-    if (filteredProxies.length === 0) return;
-    const raw = generateRawLinks(filteredProxies);
-    writeClipboard(raw);
-    showToast('📋 原始链接已复制', 'success');
-}
-
 function writeClipboard(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).catch(() => {
-            fallbackCopyTextToClipboard(text);
-        });
+        navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
     } else {
-        fallbackCopyTextToClipboard(text);
+        fallbackCopy(text);
     }
 }
 
-function fallbackCopyTextToClipboard(text) {
+function fallbackCopy(text) {
     const ta = document.createElement('textarea');
     ta.value = text;
-    // 避免在页面底部出现闪烁，并确保可以被选中
-    ta.style.top = "0";
-    ta.style.left = "0";
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
     document.body.appendChild(ta);
     ta.focus();
     ta.select();
-    try {
-        document.execCommand('copy');
-    } catch (err) {
-        console.error('Fallback: Oops, unable to copy', err);
-    }
+    try { document.execCommand('copy'); } catch (e) { }
     document.body.removeChild(ta);
 }
 
@@ -342,7 +282,11 @@ function clearAll() {
     filteredProxies = [];
     activeFilters.clear();
     currentOutput = '';
-    renderAll();
+    cachedInput = '';
+    renderStats({});
+    renderFilterChips();
+    renderNodes([]);
+    document.getElementById('outputPreview').textContent = '';
     showToast('🗑️ 已清空', 'info');
 }
 
@@ -359,7 +303,7 @@ function loadSample() {
         'vless://abcd1234-5678-90ab-cdef-112233445566@reality.example.com:443?type=tcp&security=reality&pbk=publickey123&sid=shortid&sni=www.microsoft.com&fp=chrome&flow=xtls-rprx-vision#德国-VLESS-Reality'
     ];
     document.getElementById('inputArea').value = sample.join('\n');
-    showToast('📦 已加载示例数据（9 个节点，全部 9 种协议）', 'info');
+    showToast('📦 已加载示例数据（9 个节点）', 'info');
 }
 
 // ==================== 拖拽上传 ====================
@@ -421,23 +365,14 @@ function onSearchInput() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initDragDrop();
-    // 初始化 format tabs
     document.querySelectorAll('.format-tab').forEach(tab => {
         tab.addEventListener('click', () => switchFormat(tab.dataset.format));
     });
-
-    // 初始化无节点的默认展示UI
-    renderAll();
-    // 加载订阅节点列表
     loadNodeList();
-
-    // 检测订阅服务状态
     checkServerStatus();
 });
 
 // ==================== 订阅服务 ====================
-
-const SUB_SERVER = window.location.origin;
 
 function checkServerStatus() {
     const el = document.getElementById('serverStatus');
@@ -452,15 +387,12 @@ function checkServerStatus() {
                 : '● 已运行';
             el.className = 'server-status online';
 
-            // 显示订阅信息统计
             if (statsEl && info.subscription) {
                 displaySubscriptionInfo(info.subscription, statsEl);
             }
 
-            // 加载历史记录
             loadHistory();
 
-            // 如果有节点，显示订阅链接列表
             if (info.nodeCount > 0) {
                 const host = window.location.host;
                 const proto = window.location.protocol;
@@ -476,7 +408,6 @@ function checkServerStatus() {
                 };
                 renderSubUrls(subUrls, info.nodeCount, 0);
 
-                // 初次进入页面且没有解析节点时，自动拉取保存的节点
                 if (allProxies.length === 0) {
                     loadSavedNodes();
                 }
@@ -493,23 +424,25 @@ function loadSavedNodes() {
     fetch(SUB_SERVER + '/api/links', getFetchOptions())
         .then(r => r.text())
         .then(text => {
-            if (text.trim()) {
-                const links = extractLinks(text);
-                allProxies = [];
-                for (const link of links) {
-                    const node = parseLink(link);
-                    if (node) allProxies.push(node);
-                }
-
-                // Deduplicate if needed
-                if (document.getElementById('cfgDedupe').checked) {
-                    allProxies = deduplicateProxies(allProxies);
-                }
-
-                activeFilters.clear();
-                filteredProxies = [...allProxies];
-                renderAll();
-            }
+            if (!text.trim()) return;
+            // 通过后端 API 解析已保存的节点
+            return fetch(SUB_SERVER + '/api/convert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input: text, format: currentFormat })
+            }).then(r => r.json());
+        })
+        .then(data => {
+            if (!data || !data.success) return;
+            allProxies = deduplicateProxies(data.proxies || []);
+            cachedInput = document.getElementById('inputArea').value.trim() || '';
+            currentOutput = data.output || '';
+            activeFilters.clear();
+            filteredProxies = [...allProxies];
+            renderStats(data.stats);
+            renderFilterChips();
+            renderNodes(filteredProxies);
+            renderOutputPreview();
         })
         .catch(e => console.error('获取保存节点失败:', e));
 }
@@ -517,7 +450,6 @@ function loadSavedNodes() {
 function displaySubscriptionInfo(subInfo, container) {
     const items = [];
 
-    // 流量信息
     if (subInfo.traffic) {
         const t = subInfo.traffic;
         const isUnlimited = t.total === 0;
@@ -531,30 +463,12 @@ function displaySubscriptionInfo(subInfo, container) {
                 ${isUnlimited ? '' : `<div class="traffic-bar"><div class="traffic-bar-fill ${percent >= 90 ? 'danger' : percent >= 75 ? 'warning' : ''}" style="width: ${Math.min(percent, 100)}%"></div></div>`}
             </div>
         `);
-
-        items.push(`
-            <div class="sub-info-item">
-                <div class="sub-info-label">⬆️ 上传</div>
-                <div class="sub-info-value">${t.uploadFormatted}</div>
-            </div>
-        `);
-
-        items.push(`
-            <div class="sub-info-item">
-                <div class="sub-info-label">⬇️ 下载</div>
-                <div class="sub-info-value">${t.downloadFormatted}</div>
-            </div>
-        `);
+        items.push(`<div class="sub-info-item"><div class="sub-info-label">⬆️ 上传</div><div class="sub-info-value">${t.uploadFormatted}</div></div>`);
+        items.push(`<div class="sub-info-item"><div class="sub-info-label">⬇️ 下载</div><div class="sub-info-value">${t.downloadFormatted}</div></div>`);
     }
 
-    // 到期时间
     if (subInfo.expire) {
-        items.push(`
-            <div class="sub-info-item">
-                <div class="sub-info-label">⏰ 到期时间</div>
-                <div class="sub-info-value">${subInfo.expire}</div>
-            </div>
-        `);
+        items.push(`<div class="sub-info-item"><div class="sub-info-label">⏰ 到期时间</div><div class="sub-info-value">${subInfo.expire}</div></div>`);
     }
 
     if (items.length > 0) {
@@ -576,8 +490,8 @@ function saveToSubService() {
     btn.disabled = true;
     btn.textContent = '⏳ 保存中...';
 
-    // 生成原始链接并发送到服务器
-    const rawLinks = generateRawLinks(filteredProxies);
+    // 用 cachedInput 或 inputArea 的内容作为原始链接
+    const rawLinks = cachedInput || document.getElementById('inputArea').value.trim();
 
     fetch(SUB_SERVER + '/api/save', getFetchOptions({
         method: 'POST',
@@ -591,9 +505,6 @@ function saveToSubService() {
         })
         .then(data => {
             if (data.error) throw new Error(data.error);
-
-            // 显示订阅 URL 列表
-            const grid = document.getElementById('subUrlGrid');
             renderSubUrls(data.subUrls, data.count, data.newCount);
             showToast(`✅ ${data.count} 个节点已保存到订阅服务`, 'success');
             checkServerStatus();
@@ -601,215 +512,17 @@ function saveToSubService() {
         .catch(e => {
             status.textContent = '❌ ' + e.message;
             status.style.color = 'var(--danger)';
-            showToast('❌ 保存失败: ' + e.message + '（请确认 node server.js 已启动）', 'error');
+            showToast('❌ 保存失败: ' + e.message, 'error');
         })
         .finally(() => {
             btn.disabled = false;
-            btn.textContent = '💾 保存当前节点到订阅服务';
+            btn.textContent = '💾 保存节点';
         });
 }
 
 function copyUrl(url) {
     writeClipboard(url);
     showToast('📋 已复制: ' + url, 'success');
-}
-
-// ==================== 客户端一键导入 ====================
-
-function importToClient(client) {
-    if (filteredProxies.length === 0) {
-        showToast('请先转换节点', 'error');
-        return;
-    }
-
-    const options = getConfigOptions();
-    const rawLinks = generateRawLinks(filteredProxies);
-    const b64Sub = generateBase64Sub(filteredProxies);
-
-    switch (client) {
-        case 'clash': {
-            // Clash for Windows / Clash Verge - 下载 YAML + 尝试 URL scheme
-            const yaml = generateClashConfig(filteredProxies, options);
-            const dataUri = 'data:application/yaml;base64,' + b64Encode(yaml);
-            const schemeUrl = 'clash://install-config?url=' + encodeURIComponent(dataUri);
-
-            // 尝试 URL scheme，同时下载文件
-            downloadBlob(yaml, 'clash_config.yaml', 'text/yaml');
-            tryOpenScheme(schemeUrl);
-            showToast('📥 Clash YAML 配置已下载，如已安装客户端将自动导入', 'success');
-            showQRForData(schemeUrl, 'Clash', '使用 Clash 客户端扫码导入');
-            break;
-        }
-        case 'clash-meta': {
-            const yaml = generateClashMetaConfig(filteredProxies, options);
-            const dataUri = 'data:application/yaml;base64,' + b64Encode(yaml);
-            const schemeUrl = 'clash://install-config?url=' + encodeURIComponent(dataUri);
-
-            downloadBlob(yaml, 'mihomo_config.yaml', 'text/yaml');
-            tryOpenScheme(schemeUrl);
-            showToast('📥 Clash Meta 配置已下载', 'success');
-            showQRForData(schemeUrl, 'Clash Meta', '使用 Mihomo / Clash Verge Rev 扫码导入');
-            break;
-        }
-        case 'shadowrocket': {
-            // Shadowrocket sub:// scheme = base64(subscription_url or content)
-            // Shadowrocket 也支持直接导入 Base64 订阅
-            const subScheme = 'sub://' + b64Sub;
-            writeClipboard(subScheme);
-            tryOpenScheme(subScheme);
-            showToast('🚀 Shadowrocket 订阅链接已复制，如已安装将自动打开', 'success');
-            showQRForData(subScheme, 'Shadowrocket', '使用 Shadowrocket 扫码添加订阅');
-            break;
-        }
-        case 'v2rayn': {
-            // V2RayN/NG - 复制 Base64 订阅内容到剪贴板，用户在客户端粘贴
-            writeClipboard(b64Sub);
-            showToast('📋 Base64 订阅已复制！在 V2RayN 中：订阅 → 导入 → 粘贴', 'success');
-            // 也尝试 V2RayNG scheme
-            showQRForData(rawLinks.split('\n')[0] || '', 'V2RayN/NG', '使用 V2RayNG 逐个扫码添加，或在客户端中粘贴 Base64 订阅');
-            break;
-        }
-        case 'surge': {
-            const conf = generateSurgeConfig(filteredProxies, options);
-            downloadBlob(conf, 'surge_config.conf', 'text/plain');
-            showToast('📥 Surge 配置已下载，在 Surge 中导入即可', 'success');
-            break;
-        }
-        case 'singbox': {
-            const json = generateSingBoxConfig(filteredProxies, options);
-            downloadBlob(json, 'singbox_config.json', 'application/json');
-            showToast('📥 Sing-Box 配置已下载', 'success');
-            break;
-        }
-        case 'quantumultx': {
-            // Quantumult X - 生成节点列表（vmess=, trojan= 等格式）
-            const qxNodes = generateQXNodes(filteredProxies);
-            writeClipboard(qxNodes);
-            showToast('📋 Quantumult X 节点已复制！在 QX 中粘贴到 [server_local] 段', 'success');
-            break;
-        }
-        case 'raw-clipboard': {
-            writeClipboard(rawLinks);
-            showToast('📋 原始链接已复制到剪贴板（' + filteredProxies.length + ' 条）', 'success');
-            break;
-        }
-    }
-}
-
-// ==================== Quantumult X 节点格式 ====================
-
-function generateQXNodes(proxies) {
-    return proxies.map(p => {
-        switch (p.type) {
-            case 'vmess': {
-                let line = `vmess=${p.server}:${p.port}, method=${p.cipher || 'auto'}, password=${p.uuid}`;
-                if (p.tls) line += ', over-tls=true, tls-verification=false';
-                if (p['ws-opts']) line += `, obfs=ws, obfs-host=${(p['ws-opts'].headers && p['ws-opts'].headers.Host) || ''}, obfs-uri=${p['ws-opts'].path || '/'}`;
-                line += `, tag=${p.name}`;
-                return line;
-            }
-            case 'trojan':
-                return `trojan=${p.server}:${p.port}, password=${p.password}, over-tls=true, tls-verification=false${p.sni ? ', tls-host=' + p.sni : ''}, tag=${p.name}`;
-            case 'ss':
-                return `shadowsocks=${p.server}:${p.port}, method=${p.cipher}, password=${p.password}, tag=${p.name}`;
-            default:
-                return `# ${p.name} (${p.type} 不支持 QX 格式)`;
-        }
-    }).join('\n');
-}
-
-// ==================== URL Scheme 打开 ====================
-
-function tryOpenScheme(url) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => a.remove(), 100);
-}
-
-function downloadBlob(content, filename, mime) {
-    const blob = new Blob([content], { type: mime + ';charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-}
-
-// ==================== QR 码 ====================
-
-function showQRForData(data, clientName, tip) {
-    const section = document.getElementById('qrSection');
-    const canvas = document.getElementById('qrCanvas');
-    const nameEl = document.getElementById('qrClientName');
-    const tipEl = document.getElementById('qrTip');
-
-    nameEl.textContent = clientName;
-    tipEl.textContent = tip;
-    canvas.innerHTML = '';
-
-    // 数据太长时截断或提示
-    if (data.length > 2953) {
-        // QR 码最大容量约 2953 字节 (版本 40, L 纠错)
-        canvas.innerHTML = '<p style="color:var(--warning);padding:20px;text-align:center">⚠️ 数据过长无法生成 QR 码<br><small>请使用复制功能手动导入</small></p>';
-        section.style.display = 'block';
-        return;
-    }
-
-    try {
-        if (typeof qrcode === 'undefined') {
-            canvas.innerHTML = '<p style="color:var(--text-muted);padding:20px;text-align:center">QR 码库加载中...</p>';
-            section.style.display = 'block';
-            return;
-        }
-
-        // 自动选择合适的 version
-        let qr;
-        for (let typeNum = 10; typeNum <= 40; typeNum++) {
-            try {
-                qr = qrcode(typeNum, 'L');
-                qr.addData(data);
-                qr.make();
-                break;
-            } catch (e) {
-                qr = null;
-            }
-        }
-
-        if (!qr) {
-            canvas.innerHTML = '<p style="color:var(--warning);padding:20px;text-align:center">⚠️ 无法生成 QR 码</p>';
-            section.style.display = 'block';
-            return;
-        }
-
-        const img = document.createElement('img');
-        img.src = qr.createDataURL(4, 8);
-        img.style.width = '200px';
-        img.style.height = '200px';
-        img.style.borderRadius = '12px';
-        img.style.imageRendering = 'pixelated';
-        canvas.appendChild(img);
-    } catch (e) {
-        canvas.innerHTML = '<p style="color:var(--danger);padding:20px;text-align:center">QR 码生成失败</p>';
-    }
-
-    section.style.display = 'block';
-    section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-function showQR(type) {
-    if (filteredProxies.length === 0) return;
-    if (type === 'sub') {
-        const b64 = generateBase64Sub(filteredProxies);
-        showQRForData(b64, '通用订阅', '使用支持订阅的客户端扫码导入');
-    }
-}
-
-function closeQR() {
-    document.getElementById('qrSection').style.display = 'none';
 }
 
 // ==================== 订阅信息管理 ====================
@@ -840,8 +553,7 @@ function toggleSubManage() {
 
 function toggleTrafficInputs() {
     const enabled = document.getElementById('subTrafficEnabled').value === 'true';
-    const groups = ['trafficUploadGroup', 'trafficDownloadGroup', 'trafficTotalGroup', 'trafficResetGroup'];
-    groups.forEach(id => {
+    ['trafficUploadGroup', 'trafficDownloadGroup', 'trafficTotalGroup', 'trafficResetGroup'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = enabled ? 'block' : 'none';
     });
@@ -851,32 +563,21 @@ function loadSubConfig() {
     fetch(SUB_SERVER + '/api/subscription', getFetchOptions())
         .then(r => r.json())
         .then(data => {
-            if (!data.success || !data.subscription) {
-                showToast('加载配置失败', 'error');
-                return;
-            }
-
+            if (!data.success || !data.subscription) { showToast('加载配置失败', 'error'); return; }
             const sub = data.subscription;
-
-            // 基本信息
             document.getElementById('subTitle').value = sub.title || '';
             document.getElementById('subUpdateInterval').value = sub.updateInterval || 24;
-
-            // 流量配置
             if (sub.traffic) {
                 document.getElementById('subTrafficEnabled').value = sub.traffic.enabled ? 'true' : 'false';
-                document.getElementById('subTrafficUpload').value = (sub.traffic.upload / 1073741824).toFixed(2); // 字节转GB
+                document.getElementById('subTrafficUpload').value = (sub.traffic.upload / 1073741824).toFixed(2);
                 document.getElementById('subTrafficDownload').value = (sub.traffic.download / 1073741824).toFixed(2);
                 document.getElementById('subTrafficTotal').value = (sub.traffic.total / 1073741824).toFixed(0);
                 document.getElementById('subTrafficResetDay').value = sub.traffic.resetDay || 1;
             }
-
             toggleTrafficInputs();
             showToast('配置已加载', 'success');
         })
-        .catch(e => {
-            showToast('加载配置失败: ' + e.message, 'error');
-        });
+        .catch(e => showToast('加载配置失败: ' + e.message, 'error'));
 }
 
 function saveSubConfig() {
@@ -885,7 +586,7 @@ function saveSubConfig() {
         updateInterval: parseInt(document.getElementById('subUpdateInterval').value),
         traffic: {
             enabled: document.getElementById('subTrafficEnabled').value === 'true',
-            upload: Math.round(parseFloat(document.getElementById('subTrafficUpload').value) * 1073741824), // GB转字节
+            upload: Math.round(parseFloat(document.getElementById('subTrafficUpload').value) * 1073741824),
             download: Math.round(parseFloat(document.getElementById('subTrafficDownload').value) * 1073741824),
             total: Math.round(parseFloat(document.getElementById('subTrafficTotal').value) * 1073741824),
             resetDay: parseInt(document.getElementById('subTrafficResetDay').value)
@@ -899,42 +600,24 @@ function saveSubConfig() {
     }))
         .then(r => r.json())
         .then(data => {
-            if (data.success) {
-                showToast('✅ 配置已保存', 'success');
-                checkServerStatus(); // 刷新显示
-            } else {
-                throw new Error(data.error || '保存失败');
-            }
+            if (data.success) { showToast('✅ 配置已保存', 'success'); checkServerStatus(); }
+            else throw new Error(data.error || '保存失败');
         })
-        .catch(e => {
-            showToast('❌ 保存失败: ' + e.message, 'error');
-        });
+        .catch(e => showToast('❌ 保存失败: ' + e.message, 'error'));
 }
 
 function resetTraffic() {
-    if (!confirm('确定要重置流量统计吗？上传和下载流量将归零。')) {
-        return;
-    }
-
-    fetch(SUB_SERVER + '/api/subscription/reset-traffic', getFetchOptions({
-        method: 'POST'
-    }))
+    if (!confirm('确定要重置流量统计吗？上传和下载流量将归零。')) return;
+    fetch(SUB_SERVER + '/api/subscription/reset-traffic', getFetchOptions({ method: 'POST' }))
         .then(r => r.json())
         .then(data => {
-            if (data.success) {
-                showToast('✅ 流量已重置', 'success');
-                loadSubConfig(); // 重新加载配置
-                checkServerStatus(); // 刷新显示
-            } else {
-                throw new Error(data.error || '重置失败');
-            }
+            if (data.success) { showToast('✅ 流量已重置', 'success'); loadSubConfig(); checkServerStatus(); }
+            else throw new Error(data.error || '重置失败');
         })
-        .catch(e => {
-            showToast('❌ 重置失败: ' + e.message, 'error');
-        });
+        .catch(e => showToast('❌ 重置失败: ' + e.message, 'error'));
 }
 
-// ==================== 上传历史记录 ====================
+// ==================== 上传历史 ====================
 
 function loadHistory() {
     const container = document.getElementById('historyList');
@@ -944,67 +627,38 @@ function loadHistory() {
         .then(r => r.json())
         .then(data => {
             if (!data.success || !data.history || data.history.length === 0) {
-                container.innerHTML = '<div class="empty-state" style="padding: 20px; text-align: center; color: var(--text-muted);">暂无上传记录</div>';
+                container.innerHTML = '<div class="empty-state" style="padding:20px;text-align:center;color:var(--text-muted)">暂无上传记录</div>';
                 return;
             }
-
-            container.innerHTML = data.history.map((item, index) => {
+            container.innerHTML = data.history.map(item => {
                 const time = new Date(item.timestamp).toLocaleString('zh-CN');
                 const nodesPreview = item.nodes.slice(0, 5).map(n => esc(n)).join('、');
                 const moreCount = item.nodes.length > 5 ? `... 等 ${item.nodes.length} 个` : '';
-                return `<div class="history-item">
-                    <div class="history-header">
-                        <span class="history-time">📅 ${time}</span>
-                        <span class="history-count">${item.nodeCount} 个节点</span>
-                    </div>
-                    <div class="history-nodes">${nodesPreview}${moreCount}</div>
-                </div>`;
+                return `<div class="history-item"><div class="history-header"><span class="history-time">📅 ${time}</span><span class="history-count">${item.nodeCount} 个节点</span></div><div class="history-nodes">${nodesPreview}${moreCount}</div></div>`;
             }).join('');
         })
         .catch(() => {
-            container.innerHTML = '<div class="empty-state" style="padding: 20px; text-align: center; color: var(--text-muted);">加载失败</div>';
+            container.innerHTML = '<div class="empty-state" style="padding:20px;text-align:center;color:var(--text-muted)">加载失败</div>';
         });
 }
 
 function clearHistory() {
     if (!confirm('确定要清空所有上传历史记录吗？')) return;
-
-    fetch(SUB_SERVER + '/api/history', getFetchOptions({
-        method: 'DELETE'
-    }))
-        .then(async r => {
-            const data = await r.json();
-            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
-            return data;
-        })
-        .then(data => {
-            showToast('✅ 历史记录已清空', 'success');
-            loadHistory();
-        })
-        .catch(e => showToast('❌ 清空失败: ' + e.message, 'error'));
-}
-
-// ==================== 清空所有节点 ====================
-
-function clearAllNodes() {
-    if (!confirm('⚠️ 确定要清空订阅中的所有节点吗？此操作不可恢复！')) return;
-
-    fetch(SUB_SERVER + '/api/links', getFetchOptions({
-        method: 'DELETE'
-    }))
-        .then(async r => {
-            const data = await r.json();
-            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
-            return data;
-        })
-        .then(data => {
-            showToast('✅ 所有节点已清空', 'success');
-            checkServerStatus();
-        })
+    fetch(SUB_SERVER + '/api/history', getFetchOptions({ method: 'DELETE' }))
+        .then(async r => { const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status); return d; })
+        .then(() => { showToast('✅ 历史记录已清空', 'success'); loadHistory(); })
         .catch(e => showToast('❌ 清空失败: ' + e.message, 'error'));
 }
 
 // ==================== 节点管理 ====================
+
+function clearAllNodes() {
+    if (!confirm('⚠️ 确定要清空订阅中的所有节点吗？此操作不可恢复！')) return;
+    fetch(SUB_SERVER + '/api/links', getFetchOptions({ method: 'DELETE' }))
+        .then(async r => { const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status); return d; })
+        .then(() => { showToast('✅ 所有节点已清空', 'success'); checkServerStatus(); })
+        .catch(e => showToast('❌ 清空失败: ' + e.message, 'error'));
+}
 
 function toggleNodeManage() {
     const panel = document.getElementById('nodeManagePanel');
@@ -1023,11 +677,7 @@ function loadNodeList() {
     container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted)">加载中...</div>';
 
     fetch(SUB_SERVER + '/api/nodes', { mode: 'cors' })
-        .then(async r => {
-            const data = await r.json();
-            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
-            return data;
-        })
+        .then(async r => { const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status); return d; })
         .then(data => {
             countEl.textContent = `共 ${data.count} 个节点`;
             const batchBar = document.getElementById('batchActionBar');
@@ -1039,25 +689,21 @@ function loadNodeList() {
             }
 
             const typeColors = {
-                VMESS: '#818cf8', VLESS: '#34d399', SS: '#60a5fa',
-                SSR: '#f472b6', TROJAN: '#fbbf24', HYSTERIA: '#fb923c',
-                HYSTERIA2: '#c4b5fd', TUIC: '#2dd4bf', WIREGUARD: '#a3e635', HY2: '#c4b5fd', WG: '#a3e635'
+                VMESS: '#818cf8', VLESS: '#34d399', SS: '#60a5fa', SSR: '#f472b6',
+                TROJAN: '#fbbf24', HYSTERIA: '#fb923c', HYSTERIA2: '#c4b5fd',
+                TUIC: '#2dd4bf', WIREGUARD: '#a3e635', HY2: '#c4b5fd', WG: '#a3e635'
             };
 
             container.innerHTML = data.nodes.map(node => {
                 const color = typeColors[node.type] || '#94a3b8';
-                const escLink = esc(node.link);
-                const escName = esc(node.name);
-                return `
-                <div id="node-row-${node.index}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">
+                return `<div id="node-row-${node.index}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">
                     <input type="checkbox" class="node-checkbox" value="${node.index}" onchange="updateSelectedCount()" style="width:16px;height:16px;accent-color:var(--danger);cursor:pointer">
                     <span style="min-width:24px;color:var(--text-muted);font-size:11px">#${node.index}</span>
                     <span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;color:${color};background:${color}22">${node.type}</span>
-                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escLink}">${escName}</span>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(node.link)}">${esc(node.name)}</span>
                     <button onclick="deleteNode(${node.index})" style="background:rgba(239,68,68,0.1);color:#ef4444;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap"
                         onmouseover="this.style.background='rgba(239,68,68,0.25)'" onmouseout="this.style.background='rgba(239,68,68,0.1)'">✕ 删除</button>
-                </div>
-                `;
+                </div>`;
             }).join('');
 
             document.getElementById('selectAllNodes').checked = false;
@@ -1070,27 +716,14 @@ function loadNodeList() {
 
 function deleteNode(index) {
     if (!confirm(`确定要删除节点 #${index} 吗？`)) return;
-
     fetch(SUB_SERVER + `/api/nodes?index=${index}`, getFetchOptions({ method: 'DELETE' }))
-        .then(async r => {
-            const data = await r.json();
-            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
-            return data;
-        })
-        .then(data => {
-            showToast(`✅ 已删除，剩余 ${data.remaining} 个节点`, 'success');
-            loadNodeList();
-            checkServerStatus();
-            loadSavedNodes(); // sync frontend Node List
-        })
+        .then(async r => { const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status); return d; })
+        .then(data => { showToast(`✅ 已删除，剩余 ${data.remaining} 个节点`, 'success'); loadNodeList(); checkServerStatus(); loadSavedNodes(); })
         .catch(e => showToast('❌ 删除失败: ' + e.message, 'error'));
 }
 
-
-
 function toggleSelectAllNodes(chk) {
-    const checkboxes = document.querySelectorAll('.node-checkbox');
-    checkboxes.forEach(cb => cb.checked = chk.checked);
+    document.querySelectorAll('.node-checkbox').forEach(cb => cb.checked = chk.checked);
     updateSelectedCount();
 }
 
@@ -1101,78 +734,47 @@ function updateSelectedCount() {
     const countSpan = document.getElementById('selectedCount');
 
     if (countSpan) countSpan.textContent = count;
-
     if (btn) {
         if (count > 0) {
-            btn.style.opacity = '1';
-            btn.style.pointerEvents = 'auto';
-            btn.style.background = '#ef4444';
-            btn.style.color = '#fff';
+            btn.style.opacity = '1'; btn.style.pointerEvents = 'auto';
+            btn.style.background = '#ef4444'; btn.style.color = '#fff';
         } else {
-            btn.style.opacity = '0.5';
-            btn.style.pointerEvents = 'none';
-            btn.style.background = 'rgba(239,68,68,0.1)';
-            btn.style.color = '#ef4444';
+            btn.style.opacity = '0.5'; btn.style.pointerEvents = 'none';
+            btn.style.background = 'rgba(239,68,68,0.1)'; btn.style.color = '#ef4444';
         }
     }
 
     const selectAll = document.getElementById('selectAllNodes');
-    if (selectAll) {
-        selectAll.checked = (count === checkboxes.length && checkboxes.length > 0);
-    }
+    if (selectAll) selectAll.checked = (count === checkboxes.length && checkboxes.length > 0);
 }
 
 function deleteSelectedNodes() {
-    const checkboxes = document.querySelectorAll('.node-checkbox:checked');
-    const indices = Array.from(checkboxes).map(cb => parseInt(cb.value));
-
+    const indices = Array.from(document.querySelectorAll('.node-checkbox:checked')).map(cb => parseInt(cb.value));
     if (indices.length === 0) return;
-    if (!confirm(`确定要批量删除这 ${indices.length} 个选中节点吗？\n（操作不可逆转）`)) return;
+    if (!confirm(`确定要批量删除这 ${indices.length} 个选中节点吗？`)) return;
 
     fetch(SUB_SERVER + '/api/nodes/batch-delete', getFetchOptions({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ indices })
     }))
-        .then(async r => {
-            const data = await r.json();
-            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
-            return data;
-        })
-        .then(data => {
-            showToast(`✅ 已批量删除 ${data.removedCount} 个节点，剩余 ${data.remaining} 个节点`, 'success');
-            loadNodeList();
-            checkServerStatus();
-            loadSavedNodes(); // sync frontend Node List
-        })
+        .then(async r => { const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status); return d; })
+        .then(data => { showToast(`✅ 已批量删除 ${data.removedCount} 个节点`, 'success'); loadNodeList(); checkServerStatus(); loadSavedNodes(); })
         .catch(e => showToast('❌ 批量删除失败: ' + e.message, 'error'));
 }
 
 function addSingleNode() {
     const input = document.getElementById('addNodeInput');
     const link = input.value.trim();
-    if (!link) {
-        showToast('请输入节点链接', 'error');
-        return;
-    }
+    if (!link) { showToast('请输入节点链接', 'error'); return; }
 
     fetch(SUB_SERVER + '/api/nodes', getFetchOptions({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ link })
     }))
-        .then(async r => {
-            const data = await r.json();
-            if (!r.ok || data.error) throw new Error(data.error || 'HTTP ' + r.status);
-            return data;
-        })
-        .then(data => {
-            showToast(`✅ 已添加，共 ${data.count} 个节点`, 'success');
-            input.value = '';
-            loadNodeList();
-            checkServerStatus();
-            loadSavedNodes(); // sync frontend Node List
-        })
+        .then(async r => { const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'HTTP ' + r.status); return d; })
+        .then(data => { showToast(`✅ 已添加，共 ${data.count} 个节点`, 'success'); input.value = ''; loadNodeList(); checkServerStatus(); loadSavedNodes(); })
         .catch(e => showToast('❌ 添加失败: ' + e.message, 'error'));
 }
 
@@ -1181,45 +783,35 @@ function renderSubUrls(subUrls, totalCount, newCount) {
     if (!grid) return;
 
     const formatLabels = {
-        'universal': { name: '通用订阅', icon: '🌐', desc: '自动识别客户端（推荐）' },
-        'base64': { name: 'Base64 订阅', icon: '⚔️', desc: 'Base64 编码' },
+        universal: { name: '通用订阅', icon: '🌐', desc: '自动识别客户端（推荐）' },
+        base64: { name: 'Base64 订阅', icon: '⚔️', desc: 'Base64 编码' },
         'clash-yaml': { name: 'Clash YAML', icon: '📄', desc: 'Clash 完整配置' },
         'clash-meta': { name: 'Clash Meta', icon: '🌀', desc: 'Mihomo / Verge Rev' },
-        'surge': { name: 'Surge', icon: '🌊', desc: 'Surge iOS/macOS' },
+        surge: { name: 'Surge', icon: '🌊', desc: 'Surge iOS/macOS' },
         'sing-box': { name: 'Sing-Box', icon: '📦', desc: 'Sing-Box / NekoBox' },
-        'raw': { name: '原始链接', icon: '📋', desc: '通用' }
+        raw: { name: '原始链接', icon: '📋', desc: '通用' }
     };
 
     grid.innerHTML = Object.entries(subUrls).map(([fmt, url]) => {
         const label = formatLabels[fmt] || { name: fmt, icon: '🔗', desc: '' };
-
-        let finalUrl = url;
-        if (fmt !== 'universal') {
-            finalUrl += buildConfigQueryString();
-        }
-
-        return `<div class="sub-url-item" onclick="copyUrl('${finalUrl}')" title="点击复制">
+        return `<div class="sub-url-item" onclick="copyUrl('${url}')" title="点击复制">
         <span class="sub-url-icon">${label.icon}</span>
         <div class="sub-url-info">
           <span class="sub-url-name">${label.name}</span>
           <span class="sub-url-desc">${label.desc}</span>
         </div>
-        <code class="sub-url-link">${finalUrl}</code>
+        <code class="sub-url-link">${url}</code>
         <span class="sub-url-copy">📋</span>
       </div>`;
     }).join('');
 
     const status = document.getElementById('saveStatus');
     const listSection = document.getElementById('subUrlList');
-
     if (listSection) listSection.style.display = 'block';
-
     if (status) {
-        if (newCount !== undefined && newCount > 0) {
-            status.textContent = `✅ 订阅共 ${totalCount} 个节点 （本次新增 ${newCount}，已去重合并）`;
-        } else {
-            status.textContent = `✅ 订阅共 ${totalCount} 个节点`;
-        }
+        status.textContent = (newCount > 0)
+            ? `✅ 订阅共 ${totalCount} 个节点 （本次新增 ${newCount}，已去重合并）`
+            : `✅ 订阅共 ${totalCount} 个节点`;
         status.style.color = 'var(--success)';
     }
 }
